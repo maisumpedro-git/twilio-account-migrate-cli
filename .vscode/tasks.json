@@ -1,0 +1,26 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "Build CLI",
+			"command": "npm run build",
+			"args": [],
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "build",
+			"isBackground": false
+		},
+		{
+			"type": "shell",
+			"label": "Start CLI",
+			"command": "npm start"
+		},
+		{
+			"type": "shell",
+			"label": "Run Tests",
+			"command": "npm test"
+		}
+	]
+}
