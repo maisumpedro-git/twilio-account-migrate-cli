@@ -2,33 +2,6 @@ import fs from 'fs-extra';
 import path from 'path';
 import { getTwilioClients } from '../dataFetch/twilioClients.js';
 
-function deepReplaceSids(obj, mapping) {
-  if (obj == null) return obj;
-  if (Array.isArray(obj)) return obj.map((v) => deepReplaceSids(v, mapping));
-  if (typeof obj === 'object') {
-    const out = {};
-    for (const [k, v] of Object.entries(obj)) {
-      if (typeof v === 'string') {
-        // Replace TR entities and serverless functions/channels/workflows by SID patterns
-        const replaced =
-          mapping.taskrouter.workflows[v] ||
-          mapping.taskrouter.taskQueues[v] ||
-          mapping.taskrouter.activities[v] ||
-          mapping.taskrouter.taskChannels[v] ||
-          mapping.serverless.services[v] ||
-          mapping.serverless.environments[v] ||
-          mapping.serverless.functions[v] ||
-          v;
-        out[k] = replaced;
-      } else {
-        out[k] = deepReplaceSids(v, mapping);
-      }
-    }
-    return out;
-  }
-  return obj;
-}
-
 function buildSidPairs(mapping) {
   const pairs = [];
   const pushPairs = (obj) => {
@@ -58,10 +31,7 @@ function replaceSidsInDefinition(definition, mapping) {
   let json = JSON.stringify(definition);
   const pairs = buildSidPairs(mapping);
   for (const [from, to] of pairs) {
-    // Replace as standalone JSON string tokens
-    json = json.replaceAll(`"${from}"`, `"${to}"`);
-    // Replace inside escaped JSON strings (e.g., attributes fields containing JSON)
-    json = json.replaceAll(`\\\"${from}\\\"`, `\\\"${to}\\\"`);
+    json = json.replaceAll(new RegExp(from, 'g'), to);
   }
   try {
     return JSON.parse(json);
