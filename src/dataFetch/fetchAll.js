@@ -74,9 +74,9 @@ async function fetchServerless(api) {
 }
 
 async function fetchContentTemplates(api) {
-  // Content API v1: content.v1.templates.list
+  // Content API v1: content.v1.contents.list
   try {
-    const templates = await api.content.v1.templates.list({ limit: 1000 });
+    const templates = await api.content.v1.contents.list();
     return templates.map(({ sid, friendlyName, friendly_name, uniqueName, unique_name }) => ({
       sid,
       friendlyName: friendlyName || friendly_name,
