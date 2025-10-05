@@ -1,11 +1,11 @@
 import fs from 'fs-extra';
 import path from 'path';
 
-function byName(items) {
+function byName(items, valueField = 'sid') {
   const map = new Map();
   for (const it of items || []) {
-    const name = it.friendlyName || it.uniqueName || it.domainName || it.sid;
-    if (!map.has(name)) map.set(name, it.sid);
+    const name = it.friendlyName || it.uniqueName;
+    if (!map.has(name)) map.set(name, it[valueField]);
   }
   return map;
 }
@@ -54,6 +54,10 @@ export async function buildSidMapping(source, dest) {
     const sEnv = byName(svc.environments || []);
     const dEnv = byName(dSvc?.environments || []);
     for (const [name, sid] of sEnv) mapping.serverless.environments[sid] = dEnv.get(name) || '';
+
+    const sDomainEnv = byName(svc.environments || [], 'domainName');
+    const dDomainEnv = byName(dSvc?.environments || [], 'domainName');
+    for (const [name, domainName] of sDomainEnv) mapping.serverless.environments[domainName] = dDomainEnv.get(name) || '';
 
     // functions per service (flatten)
     for (const env of svc.environments || []) {
