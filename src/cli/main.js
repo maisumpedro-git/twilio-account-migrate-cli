@@ -3,6 +3,7 @@ import { ensureEnv } from '../utils/env.js';
 import { fetchAllData } from '../dataFetch/fetchAll.js';
 import { buildSidMapping } from '../migrate/buildMapping.js';
 import { migrateStudioFlows } from '../migrate/studioFlows.js';
+import { migrateContentTemplates } from '../migrate/contentTemplates.js';
 import ora from 'ora';
 import chalk from 'chalk';
 
@@ -15,6 +16,27 @@ export async function runCli() {
   spinner.succeed('Fetched data');
 
   const mapping = await buildSidMapping(source, dest);
+
+  // First: Content Templates (so Studio Flows can reference them)
+  const { selectedTemplates } = await inquirer.prompt([
+    {
+      type: 'checkbox',
+      name: 'selectedTemplates',
+      message: 'Selecione os Content Templates para migrar:',
+      choices: (source.contentTemplates || []).map((t) => ({
+        name: `${t.friendlyName || t.uniqueName || t.sid}`,
+        value: t.sid,
+      })),
+      loop: false,
+      pageSize: 20,
+    },
+  ]);
+
+  if (selectedTemplates?.length) {
+    const tplSpinner = ora('Migrando Content Templates selecionados').start();
+    await migrateContentTemplates(selectedTemplates, { source, dest }, mapping);
+    tplSpinner.succeed('Content Templates migrados');
+  }
 
   const { selectedFlows } = await inquirer.prompt([
     {
