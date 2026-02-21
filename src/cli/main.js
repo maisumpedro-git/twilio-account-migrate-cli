@@ -1,62 +1,80 @@
-import inquirer from 'inquirer';
-import { ensureEnv } from '../utils/env.js';
-import { fetchAllData } from '../dataFetch/fetchAll.js';
-import { buildSidMapping } from '../migrate/buildMapping.js';
-import { migrateStudioFlows } from '../migrate/studioFlows.js';
-import { migrateContentTemplates } from '../migrate/contentTemplates.js';
-import ora from 'ora';
 import chalk from 'chalk';
+import inquirer from 'inquirer';
 
-export async function runCli() {
-  console.log(chalk.cyanBright('\nTwilio Account Migrate CLI'));
-  await ensureEnv();
+import { listAccounts } from '../accounts/store.js';
+import { envLabel } from '../utils/display.js';
 
-  const spinner = ora('Fetching data from both accounts').start();
-  const { source, dest } = await fetchAllData();
-  spinner.succeed('Fetched data');
+import { accountMenu } from './accountMenu.js';
+import { compareMenu } from './compareMenu.js';
+import { migrateMenu } from './migrateMenu.js';
+import { resourceMenu } from './resourceMenu.js';
+import { searchMenu } from './searchMenu.js';
 
-  const mapping = await buildSidMapping(source, dest);
+function printBanner() {
+  console.log();
+  console.log(chalk.cyanBright.bold('╔══════════════════════════════════════════╗'));
+  console.log(chalk.cyanBright.bold('║    Twilio Account Dashboard CLI          ║'));
+  console.log(chalk.cyanBright.bold('║    Gerenciamento de Contas e Ambientes   ║'));
+  console.log(chalk.cyanBright.bold('╚══════════════════════════════════════════╝'));
+  console.log();
+}
 
-  // First: Content Templates (so Studio Flows can reference them)
-  const { selectedTemplates } = await inquirer.prompt([
-    {
-      type: 'checkbox',
-      name: 'selectedTemplates',
-      message: 'Selecione os Content Templates para migrar:',
-      choices: (source.contentTemplates || []).map((t) => ({
-        name: `${t.friendlyName || t.uniqueName || t.sid}`,
-        value: t.sid,
-      })),
-      loop: false,
-      pageSize: 20,
-    },
-  ]);
-
-  if (selectedTemplates?.length) {
-    const tplSpinner = ora('Migrando Content Templates selecionados').start();
-    await migrateContentTemplates(selectedTemplates, { source, dest }, mapping);
-    tplSpinner.succeed('Content Templates migrados');
-  }
-
-  const { selectedFlows } = await inquirer.prompt([
-    {
-      type: 'checkbox',
-      name: 'selectedFlows',
-      message: 'Selecione os Flows do Studio para migrar:',
-      choices: source.studio.flows.map((f) => ({
-        name: `${f.friendlyName || f.friendly_name || f.sid}`,
-        value: f.sid,
-      })),
-      loop: false,
-      pageSize: 20,
-    },
-  ]);
-
-  if (!selectedFlows?.length) {
-    console.log(chalk.yellow('Nenhum flow selecionado.'));
+function printAccountSummary() {
+  const accounts = listAccounts();
+  if (accounts.length === 0) {
+    console.log(chalk.dim('Nenhuma conta cadastrada. Comece cadastrando uma conta.\n'));
     return;
   }
 
-  await migrateStudioFlows(selectedFlows, { source, dest }, mapping);
-  console.log(chalk.green('Migração concluída.'));
+  console.log(chalk.bold('Contas:'));
+  for (const acc of accounts) {
+    console.log(`  ${envLabel(acc.environment)} ${acc.name}`);
+  }
+  console.log();
+}
+
+export async function runCli() {
+  printBanner();
+
+  while (true) {
+    printAccountSummary();
+
+    const { action } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'action',
+        message: 'Menu principal — o que deseja fazer?',
+        choices: [
+          { name: '👤 Gerenciar Contas', value: 'accounts' },
+          { name: '📥 Baixar Recursos', value: 'resources' },
+          { name: '🔍 Comparar Ambientes', value: 'compare' },
+          { name: '🔄 Migrar Recursos', value: 'migrate' },
+          { name: '🔎 Pesquisar', value: 'search' },
+          new inquirer.Separator(),
+          { name: '🚪 Sair', value: 'exit' },
+        ],
+      },
+    ]);
+
+    switch (action) {
+      case 'accounts':
+        await accountMenu();
+        break;
+      case 'resources':
+        await resourceMenu();
+        break;
+      case 'compare':
+        await compareMenu();
+        break;
+      case 'migrate':
+        await migrateMenu();
+        break;
+      case 'search':
+        await searchMenu();
+        break;
+      case 'exit':
+        console.log(chalk.cyanBright('\nAté mais! 👋\n'));
+        return;
+    }
+  }
 }

@@ -1,132 +1,209 @@
-import fs from 'fs-extra';
-import path from 'path';
-import { getTwilioClients } from './twilioClients.js';
+import { setCachedResource } from './cache.js';
+import { createClient } from './twilioClients.js';
 
-async function fetchTaskRouter(api) {
+async function fetchWorkspace(api) {
   const workspaces = await api.taskrouter.v1.workspaces.list({ limit: 50 });
   const workspace = workspaces[0];
   if (!workspace) return null;
-
-  const [taskQueues, workflows, activities, taskChannels] = await Promise.all([
-    api.taskrouter.v1.workspaces(workspace.sid).taskQueues.list({ limit: 1000 }),
-    api.taskrouter.v1.workspaces(workspace.sid).workflows.list({ limit: 1000 }),
-    api.taskrouter.v1.workspaces(workspace.sid).activities.list({ limit: 1000 }),
-    api.taskrouter.v1.workspaces(workspace.sid).taskChannels.list({ limit: 1000 }),
-  ]);
-
   return {
-    workspace,
-    taskQueues: taskQueues.map(({ sid, friendlyName, friendly_name, uniqueName, unique_name }) => ({
-      sid,
-      friendlyName: friendlyName || friendly_name,
-      uniqueName: uniqueName || unique_name,
-    })),
-    workflows: workflows.map(({ sid, friendlyName, friendly_name, uniqueName, unique_name }) => ({
-      sid,
-      friendlyName: friendlyName || friendly_name,
-      uniqueName: uniqueName || unique_name,
-    })),
-    activities: activities.map(({ sid, friendlyName, friendly_name, uniqueName, unique_name }) => ({
-      sid,
-      friendlyName: friendlyName || friendly_name,
-      uniqueName: uniqueName || unique_name,
-    })),
-    taskChannels: taskChannels.map(({ sid, friendlyName, friendly_name, uniqueName, unique_name }) => ({
-      sid,
-      friendlyName: friendlyName || friendly_name,
-      uniqueName: uniqueName || unique_name,
-    })),
+    sid: workspace.sid,
+    friendlyName: workspace.friendlyName || workspace.friendly_name,
   };
 }
 
-async function fetchServerless(api) {
-  const services = await api.serverless.v1.services.list({ limit: 100 });
-  const results = [];
-  for (const svc of services) {
-    const environments = await api.serverless.v1.services(svc.sid).environments.list({ limit: 100 });
-    const envs = [];
-    for (const env of environments) {
-      const functions = await api.serverless.v1
-        .services(svc.sid)
-        .environments(env.sid)
-        .variables.list({ limit: 100 });
-      // Variables are not functions; Twilio Functions are under /functions; but to get function versions we need more calls.
-      // Simplify: collect functions by service/functions list
-      const funcs = await api.serverless.v1.services(svc.sid).functions.list({ limit: 100 });
-      envs.push({
-        sid: env.sid,
-        domainName: env.domainName,
-        functions: funcs.map(({ sid, friendlyName, friendly_name, uniqueName, unique_name }) => ({
-          sid,
-          friendlyName: friendlyName || friendly_name,
-          uniqueName: uniqueName || unique_name,
-        })),
-      });
-    }
-    results.push({
-      sid: svc.sid,
-      friendlyName: svc.friendlyName,
-      uniqueName: svc.uniqueName,
-      environments: envs,
-    });
-  }
-  return results;
-}
-
-async function fetchContentTemplates(api) {
-  // Content API v1: content.v1.contents.list
-  try {
-    const templates = await api.content.v1.contents.list();
-    return templates.map(({ sid, friendlyName, friendly_name, uniqueName, unique_name }) => ({
+async function fetchTaskQueues(api, workspaceSid) {
+  if (!workspaceSid) return [];
+  const queues = await api.taskrouter.v1.workspaces(workspaceSid).taskQueues.list({ limit: 1000 });
+  return queues.map(
+    ({
+      sid,
+      friendlyName,
+      friendly_name,
+      uniqueName,
+      unique_name,
+      targetWorkers,
+      target_workers,
+      maxReservedWorkers,
+      max_reserved_workers,
+      taskOrder,
+      task_order,
+    }) => ({
       sid,
       friendlyName: friendlyName || friendly_name,
       uniqueName: uniqueName || unique_name,
-    }));
-  } catch (e) {
-    return [];
-  }
+      targetWorkers: targetWorkers || target_workers,
+      maxReservedWorkers: maxReservedWorkers || max_reserved_workers,
+      taskOrder: taskOrder || task_order,
+    }),
+  );
+}
+
+async function fetchTaskChannels(api, workspaceSid) {
+  if (!workspaceSid) return [];
+  const channels = await api.taskrouter.v1
+    .workspaces(workspaceSid)
+    .taskChannels.list({ limit: 1000 });
+  return channels.map(
+    ({ sid, friendlyName, friendly_name, uniqueName, unique_name }) => ({
+      sid,
+      friendlyName: friendlyName || friendly_name,
+      uniqueName: uniqueName || unique_name,
+    }),
+  );
+}
+
+async function fetchWorkflows(api, workspaceSid) {
+  if (!workspaceSid) return [];
+  const workflows = await api.taskrouter.v1
+    .workspaces(workspaceSid)
+    .workflows.list({ limit: 1000 });
+  return workflows.map(
+    ({
+      sid,
+      friendlyName,
+      friendly_name,
+      uniqueName,
+      unique_name,
+      configuration,
+      taskReservationTimeout,
+      task_reservation_timeout,
+      assignmentCallbackUrl,
+      assignment_callback_url,
+    }) => ({
+      sid,
+      friendlyName: friendlyName || friendly_name,
+      uniqueName: uniqueName || unique_name,
+      configuration: tryParseJson(configuration),
+      taskReservationTimeout: taskReservationTimeout || task_reservation_timeout,
+      assignmentCallbackUrl: assignmentCallbackUrl || assignment_callback_url,
+    }),
+  );
 }
 
 async function fetchStudioFlows(api) {
   const flows = await api.studio.v2.flows.list({ limit: 1000 });
-  return flows.map((f) => ({ sid: f.sid, friendlyName: f.friendlyName, commitMessage: f.commitMessage }));
+  const detailed = [];
+  for (const f of flows) {
+    try {
+      const full = await api.studio.v2.flows(f.sid).fetch();
+      detailed.push({
+        sid: f.sid,
+        friendlyName: f.friendlyName || f.friendly_name,
+        status: f.status,
+        commitMessage: f.commitMessage || f.commit_message,
+        definition: full.definition || null,
+      });
+    } catch {
+      detailed.push({
+        sid: f.sid,
+        friendlyName: f.friendlyName || f.friendly_name,
+        status: f.status,
+        commitMessage: f.commitMessage || f.commit_message,
+        definition: null,
+      });
+    }
+  }
+  return detailed;
 }
 
-function saveJson(baseDir, name, data) {
-  fs.ensureDirSync(baseDir);
-  fs.writeJSONSync(path.join(baseDir, `${name}.json`), data, { spaces: 2 });
+async function fetchContentTemplates(api) {
+  try {
+    const templates = await api.content.v1.contents.list();
+    return templates.map(
+      ({
+        sid,
+        friendlyName,
+        friendly_name,
+        uniqueName,
+        unique_name,
+        types,
+        variables,
+        language,
+      }) => ({
+        sid,
+        friendlyName: friendlyName || friendly_name,
+        uniqueName: uniqueName || unique_name,
+        types: types || null,
+        variables: variables || null,
+        language: language || null,
+      }),
+    );
+  } catch {
+    return [];
+  }
 }
 
-export async function fetchAllData() {
-  const { source, dest } = getTwilioClients();
+function tryParseJson(val) {
+  if (!val || typeof val !== 'string') return val;
+  try {
+    return JSON.parse(val);
+  } catch {
+    return val;
+  }
+}
 
-  const [srcTR, dstTR] = await Promise.all([fetchTaskRouter(source), fetchTaskRouter(dest)]);
-  const [srcSrv, dstSrv] = await Promise.all([fetchServerless(source), fetchServerless(dest)]);
-  const [srcTpl, dstTpl] = await Promise.all([fetchContentTemplates(source), fetchContentTemplates(dest)]);
-  const [srcFlows, dstFlows] = await Promise.all([fetchStudioFlows(source), fetchStudioFlows(dest)]);
+export async function fetchResource(account, resourceType) {
+  const api = createClient(account);
 
-  const src = {
-    taskrouter: srcTR,
-    serverless: srcSrv,
-    contentTemplates: srcTpl,
-    studio: { flows: srcFlows },
-  };
-  const dst = {
-    taskrouter: dstTR,
-    serverless: dstSrv,
-    contentTemplates: dstTpl,
-    studio: { flows: dstFlows },
-  };
+  let data;
+  switch (resourceType) {
+    case 'workspace': {
+      data = await fetchWorkspace(api);
+      break;
+    }
+    case 'taskQueues': {
+      const ws = await fetchWorkspace(api);
+      data = await fetchTaskQueues(api, ws?.sid);
+      break;
+    }
+    case 'taskChannels': {
+      const ws = await fetchWorkspace(api);
+      data = await fetchTaskChannels(api, ws?.sid);
+      break;
+    }
+    case 'workflows': {
+      const ws = await fetchWorkspace(api);
+      data = await fetchWorkflows(api, ws?.sid);
+      break;
+    }
+    case 'studioFlows': {
+      data = await fetchStudioFlows(api);
+      break;
+    }
+    case 'contentTemplates': {
+      data = await fetchContentTemplates(api);
+      break;
+    }
+    default:
+      throw new Error(`Tipo de recurso desconhecido: ${resourceType}`);
+  }
 
-  saveJson(path.resolve('data/source'), 'taskrouter', srcTR || {});
-  saveJson(path.resolve('data/source'), 'serverless', srcSrv || []);
-  saveJson(path.resolve('data/source'), 'contentTemplates', srcTpl || []);
-  saveJson(path.resolve('data/source'), 'studioFlows', srcFlows || []);
+  setCachedResource(account.name, resourceType, data);
+  return data;
+}
 
-  saveJson(path.resolve('data/dest'), 'taskrouter', dstTR || {});
-  saveJson(path.resolve('data/dest'), 'serverless', dstSrv || []);
-  saveJson(path.resolve('data/dest'), 'contentTemplates', dstTpl || []);
-  saveJson(path.resolve('data/dest'), 'studioFlows', dstFlows || []);
+export async function fetchAllResources(account) {
+  const api = createClient(account);
 
-  return { source: src, dest: dst };
+  const workspace = await fetchWorkspace(api);
+  const wsSid = workspace?.sid;
+
+  const [taskQueues, taskChannels, workflows, studioFlows, contentTemplates] = await Promise.all([
+    fetchTaskQueues(api, wsSid),
+    fetchTaskChannels(api, wsSid),
+    fetchWorkflows(api, wsSid),
+    fetchStudioFlows(api),
+    fetchContentTemplates(api),
+  ]);
+
+  const resources = { workspace, taskQueues, taskChannels, workflows, studioFlows, contentTemplates };
+
+  setCachedResource(account.name, 'workspace', workspace);
+  setCachedResource(account.name, 'taskQueues', taskQueues);
+  setCachedResource(account.name, 'taskChannels', taskChannels);
+  setCachedResource(account.name, 'workflows', workflows);
+  setCachedResource(account.name, 'studioFlows', studioFlows);
+  setCachedResource(account.name, 'contentTemplates', contentTemplates);
+
+  return resources;
 }

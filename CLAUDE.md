@@ -1,10 +1,24 @@
 # CLAUDE.md
 
-Guide for AI assistants working on the twilio-account-migrate-cli codebase.
+Guide for AI assistants working on the twilio-cli-dashboard codebase.
 
 ## Project Overview
 
-Node.js CLI tool that migrates Twilio resources between accounts. It supports migrating Studio Flows, Content Templates, TaskRouter configurations (workspaces, queues, workflows, activities, channels), and Serverless services. The tool fetches data from source and destination accounts, builds a SID mapping, and replaces SIDs in resource definitions during migration.
+Node.js CLI dashboard for managing Twilio accounts across environments (dev, stage, prod). Supports encrypted account storage, resource caching with metadata, environment comparison (simple and advanced), cross-environment migration with SID replacement, and resource search (by name or content).
+
+### Features
+
+1. **Account Management** — Register Twilio accounts (API Key + Secret) with encrypted local storage
+2. **Resource Download** — Fetch resources with local cache and timestamp metadata; option to refresh
+3. **Environment Comparison** — Simple (count + names) and advanced (content diff) comparison
+4. **Migration** — Selective migration between accounts with automatic SID replacement based on resource names
+5. **Search** — Simple (resource names) and advanced (resource content) search across cached data
+
+### Supported Resources
+
+- Task Queues, Task Channels, Workflows, Workspace (TaskRouter)
+- Studio Flows (with full definition)
+- Content Templates
 
 ## Quick Reference
 
@@ -24,38 +38,64 @@ npm run format       # Run Prettier
 
 ```
 src/
-├── index.js                  # Entry point (loads dotenv, runs CLI)
+├── index.js                    # Entry point
+├── accounts/
+│   ├── crypto.js               # AES-256-GCM encryption (app-signature key derivation)
+│   └── store.js                # Encrypted account CRUD (~/.twilio-cli-dashboard/accounts.enc)
 ├── cli/
-│   └── main.js               # CLI orchestration with interactive prompts
+│   ├── main.js                 # Main dashboard menu loop
+│   ├── accountMenu.js          # Account add/edit/remove
+│   ├── resourceMenu.js         # Resource download with cache status
+│   ├── compareMenu.js          # Environment comparison (simple + advanced)
+│   ├── migrateMenu.js          # Cross-environment migration
+│   └── searchMenu.js           # Resource search (simple + advanced)
+├── compare/
+│   ├── simple.js               # Count + name comparison
+│   └── advanced.js             # Deep content diff (strips SIDs/dates)
 ├── dataFetch/
-│   ├── twilioClients.js      # Twilio SDK client initialization (source + dest)
-│   └── fetchAll.js           # Fetches all resources from both accounts
+│   ├── twilioClients.js        # Twilio SDK client factory (API Key auth)
+│   ├── fetchAll.js             # Resource fetchers (per-type and all-at-once)
+│   └── cache.js                # Local JSON cache with metadata (~/.twilio-cli-dashboard/cache/)
 ├── migrate/
-│   ├── buildMapping.js       # Generates SID mapping (source → dest)
-│   ├── studioFlows.js        # Studio Flow migration with SID replacement
-│   └── contentTemplates.js   # Content Template migration
+│   ├── buildMapping.js         # SID mapping by name (source → dest)
+│   ├── studioFlows.js          # Studio Flow migration with SID replacement
+│   └── contentTemplates.js     # Content Template migration
+├── search/
+│   ├── simple.js               # Name-based search
+│   └── advanced.js             # Deep content search with path highlighting
 └── utils/
-    └── env.js                # Environment variable validation and prompts
+    └── display.js              # Terminal display helpers (tables, colors, formatting)
 
-__tests__/                    # Jest unit tests
-data/                         # Runtime data (gitignored)
-├── source/                   # Fetched source account data (JSON)
-├── dest/                     # Fetched destination account data (JSON)
-└── mapping/
-    └── sid-mapping.json      # Generated SID mapping
+__tests__/                      # Jest unit tests
+```
+
+### Data Storage
+
+- **Account credentials**: `~/.twilio-cli-dashboard/accounts.enc` (AES-256-GCM encrypted)
+- **Resource cache**: `~/.twilio-cli-dashboard/cache/<account-name>/<resource>.json` (JSON with `fetchedAt` metadata)
+
+### Authentication
+
+Accounts use Twilio API Key authentication (not Account SID + Auth Token):
+```javascript
+twilio(apiKeySid, apiKeySecret, { accountSid })
 ```
 
 ### Data Flow
 
-1. **Validate credentials** — prompts for missing env vars, persists to `.env`
-2. **Fetch data** — pulls TaskRouter, Serverless, Content Templates, Studio Flows from both accounts; saves JSON to `data/{source,dest}/`
-3. **Build SID mapping** — matches resources by `friendlyName` or `uniqueName`; writes `data/mapping/sid-mapping.json`
-4. **Migrate Content Templates** — user selects templates; creates missing ones in destination; updates mapping
-5. **Migrate Studio Flows** — user selects flows; creates missing flows in destination; replaces all SIDs in flow definitions using the mapping
+1. **Register accounts** — user provides name, environment (dev/stage/prod), Account SID, API Key SID, API Key Secret; stored encrypted
+2. **Download resources** — fetches from Twilio API, saves to local cache with timestamp
+3. **Compare environments** — reads cached data from two accounts, shows differences (simple: counts/names, advanced: content diff)
+4. **Migrate** — builds SID mapping between accounts by matching resource names, replaces SIDs in definitions, creates/updates resources in destination
+5. **Search** — scans cached data for matches (simple: names only, advanced: deep content search)
 
 ### SID Replacement Strategy
 
 In `src/migrate/studioFlows.js`, SID pairs are sorted by length (longest first) to prevent partial replacements. The flow definition is serialized to JSON, all SIDs are replaced via RegExp, then parsed back. Falls back to the original definition on parse errors.
+
+### Advanced Comparison
+
+In `src/compare/advanced.js`, resources are matched by `friendlyName`/`uniqueName`. Before diffing, metadata fields (sid, accountSid, dates, url, links) are stripped to focus on meaningful content differences. A recursive deep-diff function reports all differing paths.
 
 ## Code Conventions
 
@@ -68,7 +108,7 @@ In `src/migrate/studioFlows.js`, SID pairs are sorted by length (longest first) 
 ### Style
 
 - **Prettier**: single quotes, semicolons, trailing commas, 100-char line width
-- **ESLint**: enforces alphabetically sorted import groups with newlines between them, bans unused imports
+- **ESLint**: flat config (`eslint.config.js`), alphabetically sorted import groups with newlines between them, bans unused imports
 - No classes — functional style with small, reusable async functions
 - Heavy use of `async/await` and `Promise.all()` for parallel operations
 
@@ -91,22 +131,9 @@ In `src/migrate/studioFlows.js`, SID pairs are sorted by length (longest first) 
 - **Location**: `__tests__/` directory
 - **Run**: `npm test` (uses `--experimental-vm-modules` for ESM support, `--runInBand` for sequential execution)
 - Tests mock Twilio client APIs and test isolated functions
-- Test files: `contentTemplates.test.js`, `mapping.test.js`, `replaceSids.test.js`
+- Test files: `crypto.test.js`, `store.test.js`, `cache.test.js`, `compare.test.js`, `search.test.js`, `mapping.test.js`, `contentTemplates.test.js`, `replaceSids.test.js`
 
 When adding new functionality, add corresponding tests in `__tests__/`. Mock external API calls rather than making real requests.
-
-## Environment Variables
-
-Defined in `.env` (see `.env.example`):
-
-```
-SOURCE_ACCOUNT_SID=     # Twilio source account SID
-SOURCE_AUTH_TOKEN=       # Twilio source auth token
-DEST_ACCOUNT_SID=        # Twilio destination account SID
-DEST_AUTH_TOKEN=          # Twilio destination auth token
-```
-
-The CLI prompts for missing credentials at startup and persists them to `.env`.
 
 ## Build
 
@@ -117,22 +144,27 @@ The build step (`npm run build` / `scripts/build.js`) copies `src/` to `dist/` w
 | Package | Purpose |
 |---------|---------|
 | `twilio` | Twilio SDK for all API interactions |
-| `inquirer` | Interactive CLI prompts (checkboxes, input) |
+| `inquirer` | Interactive CLI prompts (checkboxes, input, lists) |
 | `chalk` | Colored terminal output |
 | `ora` | Loading spinners |
-| `dotenv` | Loads `.env` file into `process.env` |
 | `fs-extra` | Enhanced filesystem operations (ensureDir, writeJson, readJson) |
-| `lodash` | Utility functions |
 
 ## Common Tasks
 
-### Adding a new resource type to migration
+### Adding a new resource type
 
-1. Add fetch logic in `src/dataFetch/fetchAll.js`
-2. Add mapping logic in `src/migrate/buildMapping.js`
-3. Create migration module in `src/migrate/`
-4. Wire it into the CLI flow in `src/cli/main.js`
-5. Add tests in `__tests__/`
+1. Add fetch function in `src/dataFetch/fetchAll.js`
+2. Add resource type to `RESOURCE_TYPES` and `RESOURCE_LABELS` in `src/dataFetch/cache.js`
+3. Add mapping logic in `src/migrate/buildMapping.js`
+4. Create migration module in `src/migrate/` (if migratable)
+5. Add resource type to `MIGRATABLE_TYPES` in `src/cli/migrateMenu.js` (if migratable)
+6. Add tests in `__tests__/`
+
+### Adding a new account field
+
+1. Update `addAccount` in `src/accounts/store.js`
+2. Update prompts in `src/cli/accountMenu.js`
+3. Update `createClient` in `src/dataFetch/twilioClients.js` if auth-related
 
 ### Extending SID replacement
 
