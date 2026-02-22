@@ -1,5 +1,6 @@
-import fs from 'fs-extra';
 import path from 'path';
+
+import fs from 'fs-extra';
 
 // Simple build step: copy src to dist (since we're using plain JS ESM for now)
 const srcDir = path.resolve('src');

@@ -1,6 +1,3 @@
-import fs from 'fs-extra';
-import path from 'path';
-
 function byName(items, valueField = 'sid') {
   const map = new Map();
   for (const it of items || []) {
@@ -57,7 +54,8 @@ export async function buildSidMapping(source, dest) {
 
     const sDomainEnv = byName(svc.environments || [], 'domainName');
     const dDomainEnv = byName(dSvc?.environments || [], 'domainName');
-    for (const [name, domainName] of sDomainEnv) mapping.serverless.environments[domainName] = dDomainEnv.get(name) || '';
+    for (const [name, domainName] of sDomainEnv)
+      mapping.serverless.environments[domainName] = dDomainEnv.get(name) || '';
 
     // functions per service (flatten)
     for (const env of svc.environments || []) {
@@ -76,10 +74,6 @@ export async function buildSidMapping(source, dest) {
   const sFlows = byName(source.studio?.flows || []);
   const dFlows = byName(dest.studio?.flows || []);
   for (const [name, sid] of sFlows) mapping.studio.flows[sid] = dFlows.get(name) || '';
-
-  const outPath = path.resolve('data/mapping/sid-mapping.json');
-  fs.ensureFileSync(outPath);
-  fs.writeJSONSync(outPath, mapping, { spaces: 2 });
 
   return mapping;
 }

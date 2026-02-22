@@ -1,10 +1,10 @@
 {
-  "name": "twilio-account-migrate-cli",
-  "version": "1.0.0",
-  "description": "CLI para migrar recursos do Twilio entre contas (Studio Flows, TaskRouter, Serverless, Content Templates)",
+  "name": "twilio-cli-dashboard",
+  "version": "2.0.0",
+  "description": "Painel CLI para gerenciamento de contas Twilio entre ambientes (dev, stage, prod). Cadastro de contas, download de recursos, comparação de ambientes, migração com replace de SID e pesquisa.",
   "main": "index.js",
   "bin": {
-    "twilio-account-migrate": "dist/index.js"
+    "twilio-dashboard": "dist/index.js"
   },
   "scripts": {
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand",
@@ -18,20 +18,19 @@
     "twilio",
     "studio",
     "taskrouter",
-    "serverless",
     "content",
     "migration",
-    "cli"
+    "dashboard",
+    "cli",
+    "multi-environment"
   ],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
     "chalk": "^5.6.2",
-    "dotenv": "^17.2.2",
     "fs-extra": "^11.3.1",
     "inquirer": "^12.9.4",
-    "lodash": "^4.17.21",
     "ora": "^8.2.0",
     "twilio": "^5.9.0"
   },
