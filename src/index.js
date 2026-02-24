@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 
 import { compareCommand } from './cli/commands/compare.js';
+import { deployCommand } from './cli/commands/deploy.js';
 import { pullCommand } from './cli/commands/pull.js';
 import { pushCommand } from './cli/commands/push.js';
 import { searchCommand } from './cli/commands/search.js';
@@ -69,6 +70,16 @@ program
   .option('--mode <mode>', 'Modo de busca: simple ou advanced', 'simple')
   .action(async (opts) => {
     await searchCommand(opts);
+  });
+
+program
+  .command('deploy')
+  .description('Deploy em massa de recursos a partir de um arquivo JSON')
+  .option('--account <name>', 'Nome da conta destino')
+  .requiredOption('--file <path>', 'Caminho para arquivo JSON com array de recursos')
+  .option('--var <KEY=VALUE...>', 'Variáveis para substituição (ex: --var TASKQUEUE_ATIVO=WQxxx)')
+  .action(async (opts) => {
+    await deployCommand(opts);
   });
 
 const vars = program
