@@ -1,16 +1,12 @@
-import os from 'node:os';
-import path from 'node:path';
-
 import fs from 'fs-extra';
+
+import { getStoreDir, getStoreFile } from '../config.js';
 
 import { decrypt, encrypt } from './crypto.js';
 
-const STORE_DIR = path.join(os.homedir(), '.twilio-cli-dashboard');
-const STORE_FILE = path.join(STORE_DIR, 'accounts.enc');
-
 function readStore() {
   try {
-    const raw = fs.readFileSync(STORE_FILE, 'utf8');
+    const raw = fs.readFileSync(getStoreFile(), 'utf8');
     const decrypted = decrypt(raw);
     return JSON.parse(decrypted);
   } catch {
@@ -19,9 +15,9 @@ function readStore() {
 }
 
 function writeStore(data) {
-  fs.ensureDirSync(STORE_DIR);
+  fs.ensureDirSync(getStoreDir());
   const encrypted = encrypt(JSON.stringify(data, null, 2));
-  fs.writeFileSync(STORE_FILE, encrypted, 'utf8');
+  fs.writeFileSync(getStoreFile(), encrypted, 'utf8');
 }
 
 export function listAccounts() {
