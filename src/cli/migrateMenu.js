@@ -3,7 +3,7 @@ import inquirer from 'inquirer';
 import ora from 'ora';
 
 import { listAccounts } from '../accounts/store.js';
-import { getAllCachedResources } from '../dataFetch/cache.js';
+import { buildDataFromCache, getAllCachedResources } from '../dataFetch/cache.js';
 import { createClient } from '../dataFetch/twilioClients.js';
 import { buildSidMapping } from '../migrate/buildMapping.js';
 import { migrateContentTemplates } from '../migrate/contentTemplates.js';
@@ -114,28 +114,6 @@ export async function migrateMenu() {
 
     if (!again) return;
   }
-}
-
-function buildDataFromCache(cachedResources) {
-  const workspace = cachedResources.workspace?.data || null;
-  const taskQueues = cachedResources.taskQueues?.data || [];
-  const workflows = cachedResources.workflows?.data || [];
-  const taskChannels = cachedResources.taskChannels?.data || [];
-  const contentTemplates = cachedResources.contentTemplates?.data || [];
-  const studioFlows = cachedResources.studioFlows?.data || [];
-
-  return {
-    taskrouter: {
-      workspace,
-      taskQueues,
-      workflows,
-      activities: [],
-      taskChannels,
-    },
-    serverless: [],
-    contentTemplates,
-    studio: { flows: studioFlows },
-  };
 }
 
 async function migrateContentTemplatesFlow(sourceData, destData, mapping, clients) {

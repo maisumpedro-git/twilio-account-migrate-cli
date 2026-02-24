@@ -1,13 +1,12 @@
-import os from 'node:os';
 import path from 'node:path';
 
 import fs from 'fs-extra';
 
-const CACHE_DIR = path.join(os.homedir(), '.twilio-cli-dashboard', 'cache');
+import { getCacheBaseDir } from '../config.js';
 
 function accountDir(accountName) {
   const safe = accountName.replace(/[^a-zA-Z0-9_-]/g, '_');
-  return path.join(CACHE_DIR, safe);
+  return path.join(getCacheBaseDir(), safe);
 }
 
 export function getCachedResource(accountName, resourceType) {
@@ -86,3 +85,48 @@ export const RESOURCE_LABELS = {
   studioFlows: 'Studio Flows',
   contentTemplates: 'Content Templates',
 };
+
+const RESOURCE_ALIASES = {
+  'task-queues': 'taskQueues',
+  'task-channels': 'taskChannels',
+  'studio-flows': 'studioFlows',
+  'content-templates': 'contentTemplates',
+  taskqueues: 'taskQueues',
+  taskchannels: 'taskChannels',
+  studioflows: 'studioFlows',
+  contenttemplates: 'contentTemplates',
+  workflows: 'workflows',
+  workspace: 'workspace',
+};
+
+export function normalizeResourceType(input) {
+  const lower = input.toLowerCase().trim();
+  return RESOURCE_ALIASES[lower] || input.trim();
+}
+
+export function parseResourceTypes(input) {
+  if (!input) return [...RESOURCE_TYPES];
+  return input.split(',').map(normalizeResourceType);
+}
+
+export function buildDataFromCache(cachedResources) {
+  const workspace = cachedResources.workspace?.data || null;
+  const taskQueues = cachedResources.taskQueues?.data || [];
+  const workflows = cachedResources.workflows?.data || [];
+  const taskChannels = cachedResources.taskChannels?.data || [];
+  const contentTemplates = cachedResources.contentTemplates?.data || [];
+  const studioFlows = cachedResources.studioFlows?.data || [];
+
+  return {
+    taskrouter: {
+      workspace,
+      taskQueues,
+      workflows,
+      activities: [],
+      taskChannels,
+    },
+    serverless: [],
+    contentTemplates,
+    studio: { flows: studioFlows },
+  };
+}
