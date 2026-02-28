@@ -1,0 +1,72 @@
+{
+  "description": "create task queues and workflow",
+  "createdAt": "2026-02-27T14:30:00.000Z",
+  "source": "manual",
+  "operations": [
+    {
+      "action": "create",
+      "type": "taskQueues",
+      "data": {
+        "friendlyName": "Ativo",
+        "targetWorkers": "1==1",
+        "maxReservedWorkers": 5,
+        "taskOrder": "FIFO"
+      }
+    },
+    {
+      "action": "create",
+      "type": "taskQueues",
+      "data": {
+        "friendlyName": "Padrão",
+        "targetWorkers": "skills HAS \"default\"",
+        "maxReservedWorkers": 1,
+        "taskOrder": "FIFO"
+      }
+    },
+    {
+      "action": "create",
+      "type": "workflows",
+      "data": {
+        "friendlyName": "Roteamento Principal",
+        "taskReservationTimeout": 120,
+        "configuration": {
+          "task_routing": {
+            "filters": [
+              {
+                "filter_friendly_name": "Filtro Ativo",
+                "expression": "type == 'ativo'",
+                "targets": [
+                  {
+                    "queue": "@ref:taskQueues:Ativo",
+                    "priority": 1,
+                    "timeout": 300
+                  }
+                ]
+              }
+            ],
+            "default_filter": {
+              "queue": "@ref:taskQueues:Padrão"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "rollback": [
+    {
+      "action": "delete",
+      "type": "workflows",
+      "match": { "friendlyName": "Roteamento Principal" }
+    },
+    {
+      "action": "delete",
+      "type": "taskQueues",
+      "match": { "friendlyName": "Padrão" }
+    },
+    {
+      "action": "delete",
+      "type": "taskQueues",
+      "match": { "friendlyName": "Ativo" }
+    }
+  ]
+}

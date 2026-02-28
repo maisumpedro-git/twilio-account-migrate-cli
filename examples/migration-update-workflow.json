@@ -1,0 +1,65 @@
+{
+  "description": "update workflow routing timeout",
+  "createdAt": "2026-02-27T15:00:00.000Z",
+  "source": "manual",
+  "operations": [
+    {
+      "action": "update",
+      "type": "workflows",
+      "match": { "friendlyName": "Roteamento Principal" },
+      "data": {
+        "taskReservationTimeout": 180,
+        "configuration": {
+          "task_routing": {
+            "filters": [
+              {
+                "filter_friendly_name": "Filtro Ativo",
+                "expression": "type == 'ativo'",
+                "targets": [
+                  {
+                    "queue": "@ref:taskQueues:Ativo",
+                    "priority": 1,
+                    "timeout": 600
+                  }
+                ]
+              }
+            ],
+            "default_filter": {
+              "queue": "@ref:taskQueues:Padrão"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "rollback": [
+    {
+      "action": "update",
+      "type": "workflows",
+      "match": { "friendlyName": "Roteamento Principal" },
+      "data": {
+        "taskReservationTimeout": 120,
+        "configuration": {
+          "task_routing": {
+            "filters": [
+              {
+                "filter_friendly_name": "Filtro Ativo",
+                "expression": "type == 'ativo'",
+                "targets": [
+                  {
+                    "queue": "@ref:taskQueues:Ativo",
+                    "priority": 1,
+                    "timeout": 300
+                  }
+                ]
+              }
+            ],
+            "default_filter": {
+              "queue": "@ref:taskQueues:Padrão"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
