@@ -28,7 +28,7 @@ TWILIO_API_KEY_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ### pull — Baixar recursos e gerar migration
 
-Busca recursos do cloud, compara com state local e gera migration com as diferenças.
+Busca recursos do cloud (incluindo Serverless para mapeamento de SIDs/URLs), substitui automaticamente SIDs e URLs por referências `@ref`, compara com state local e gera migration com as diferenças.
 
 ```sh
 tam pull --dir ./env/dev --env-file .env.dev
@@ -37,7 +37,7 @@ tam pull --dir ./env/dev --env-file .env.dev --resources taskQueues,workflows
 
 ### push — Aplicar migrations pendentes
 
-Executa migrations pendentes no ambiente destino. Resolve referências `@ref` automaticamente.
+Executa migrations pendentes (e parcialmente aplicadas) no ambiente destino. Resolve referências `@ref` automaticamente, incluindo padrões Serverless. Aplica delay de 1s entre operações para respeitar rate limits da API. Resumível em caso de falha — retoma da operação onde parou.
 
 ```sh
 tam push --dir ./env/dev --env-file .env.prod
@@ -52,9 +52,18 @@ Mostra diferenças sem gerar migrations nem alterar state.
 tam diff --dir ./env/dev --env-file .env.dev
 ```
 
+### diff-env — Comparar dois ambientes locais
+
+Compara state de dois ambientes locais e gera migration no diretório destino com as diferenças.
+
+```sh
+tam diff-env --source ./env/dev --target ./env/prod
+tam diff-env --source ./env/dev --target ./env/prod --resources taskQueues,workflows
+```
+
 ### revert — Reverter migration
 
-Executa operações inversas (rollback) de uma migration aplicada.
+Executa operações inversas (rollback) de uma migration aplicada. Suporta migrations parcialmente aplicadas — reverte apenas as operações que foram executadas com sucesso (em ordem inversa).
 
 ```sh
 tam revert --dir ./env/dev --env-file .env.dev                  # Reverte a última
@@ -65,16 +74,17 @@ tam revert nome-da-migration --dir ./env/dev --env-file .env.dev  # Reverte espe
 
 ```sh
 tam migration new "add support queue" --dir ./env/dev   # Cria migration manual vazia
-tam migration list --dir ./env/dev                      # Lista migrations e status
+tam migration list --dir ./env/dev                      # Lista migrations e status (applied/pending/partiallyApplied)
 ```
 
 ## Recursos Suportados
 
-| Tipo       | Recurso                                          |
-| ---------- | ------------------------------------------------ |
-| TaskRouter | Task Queues, Task Channels, Workflows, Workspace |
-| Studio     | Studio Flows (com definition completa)           |
-| Content    | Content Templates                                |
+| Tipo       | Recurso                                                        |
+| ---------- | -------------------------------------------------------------- |
+| TaskRouter | Task Queues, Task Channels, Workflows, Workspace               |
+| Studio     | Studio Flows (com definition completa + updates parciais de widgets) |
+| Content    | Content Templates                                              |
+| Serverless | Services, Environments, Functions (read-only, para mapeamento de SIDs/URLs) |
 
 ## Estrutura do Ambiente
 
@@ -88,7 +98,8 @@ env/dev/
 │   ├── workflows.json
 │   ├── studioFlows.json
 │   ├── contentTemplates.json
-│   └── migrations.json           # Controle de aplicadas/pendentes
+│   ├── serverless.json             # Serverless services/envs/functions (read-only)
+│   └── migrations.json             # Controle de applied/pending/partiallyApplied
 └── migrations/
     ├── 20260227_143000_pull-changes.json
     └── 20260227_150000_add-support-queue.json
@@ -151,6 +162,53 @@ Migrations usam `@ref:type:name` em vez de SIDs hardcoded, garantindo portabilid
 ```
 
 No push, `@ref:taskQueues:Support` é resolvido para o SID real a partir do state local ou de recursos criados na mesma migration.
+
+### Padrões Serverless @ref
+
+O pull gera automaticamente referências `@ref` para recursos Serverless, resolvidas no push:
+
+| Padrão                              | Resolve Para         | Exemplo                                              |
+| ----------------------------------- | -------------------- | ---------------------------------------------------- |
+| `@ref:serverless:Nome`              | Service SID (ZS)     | `@ref:serverless:my-service`                         |
+| `@ref:serverlessEnv:Svc:Env`       | Environment SID (ZE) | `@ref:serverlessEnv:my-service:production`           |
+| `@ref:serverlessFn:Svc:Fn`         | Function SID (ZH)    | `@ref:serverlessFn:my-service:my-fn`                 |
+| `@ref:serverlessUrl:Svc:Env:/path` | URL completa         | `@ref:serverlessUrl:my-service:production:/my-fn`    |
+
+## Updates Parciais de Widgets (Studio Flows)
+
+Migrations podem usar `mode: "partial"` com `widgetOps` para alterações granulares em widgets de Studio Flows, sem reenviar o flow inteiro:
+
+```json
+{
+  "action": "update",
+  "type": "studioFlows",
+  "match": { "friendlyName": "Main IVR" },
+  "mode": "partial",
+  "widgetOps": [
+    { "action": "create_widget", "widget": "new_step", "data": { "name": "new_step", "type": "send-message" } },
+    { "action": "update_widget", "widget": "greeting", "data": { "properties": { "body": "Olá!" } } },
+    { "action": "delete_widget", "widget": "old_step" },
+    { "action": "rename_widget", "widget": "step1", "newName": "welcome_step" }
+  ]
+}
+```
+
+No push, o executor busca a definition atual do flow no state, aplica as operações de widget e envia o resultado mesclado.
+
+## Migrations Parcialmente Aplicadas
+
+Se um push falha no meio da execução, a migration é salva como `partiallyApplied` em `migrations.json` com progresso:
+
+```json
+{
+  "applied": ["migration-1.json"],
+  "partiallyApplied": {
+    "migration-2.json": { "appliedAt": "...", "completedOps": 35, "totalOps": 70 }
+  }
+}
+```
+
+Re-executar `push` retoma da operação 36. Reverter uma migration parcialmente aplicada desfaz apenas as operações que foram executadas (em ordem inversa).
 
 ## Workflow CI/CD
 
