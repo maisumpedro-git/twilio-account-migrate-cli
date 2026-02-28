@@ -70,11 +70,11 @@ tam migration list --dir ./env/dev                      # Lista migrations e sta
 
 ## Recursos Suportados
 
-| Tipo | Recurso |
-|------|---------|
+| Tipo       | Recurso                                          |
+| ---------- | ------------------------------------------------ |
 | TaskRouter | Task Queues, Task Channels, Workflows, Workspace |
-| Studio | Studio Flows (com definition completa) |
-| Content | Content Templates |
+| Studio     | Studio Flows (com definition completa)           |
+| Content    | Content Templates                                |
 
 ## Estrutura do Ambiente
 
@@ -104,13 +104,31 @@ Cada migration contém operações declarativas e rollback automático:
   "createdAt": "2026-02-27T14:30:00.000Z",
   "source": "pull",
   "operations": [
-    { "action": "create", "type": "taskQueues", "data": { "friendlyName": "Support", "targetWorkers": "1==1" } },
-    { "action": "update", "type": "workflows", "match": { "friendlyName": "Main" }, "data": { "configuration": {} } },
+    {
+      "action": "create",
+      "type": "taskQueues",
+      "data": { "friendlyName": "Support", "targetWorkers": "1==1" }
+    },
+    {
+      "action": "update",
+      "type": "workflows",
+      "match": { "friendlyName": "Main" },
+      "data": { "configuration": {} }
+    },
     { "action": "delete", "type": "taskQueues", "match": { "friendlyName": "Old Queue" } }
   ],
   "rollback": [
-    { "action": "create", "type": "taskQueues", "data": { "friendlyName": "Old Queue", "targetWorkers": "1==1" } },
-    { "action": "update", "type": "workflows", "match": { "friendlyName": "Main" }, "data": { "configuration": {} } },
+    {
+      "action": "create",
+      "type": "taskQueues",
+      "data": { "friendlyName": "Old Queue", "targetWorkers": "1==1" }
+    },
+    {
+      "action": "update",
+      "type": "workflows",
+      "match": { "friendlyName": "Main" },
+      "data": { "configuration": {} }
+    },
     { "action": "delete", "type": "taskQueues", "match": { "friendlyName": "Support" } }
   ]
 }
@@ -145,11 +163,11 @@ No push, `@ref:taskQueues:Support` é resolvido para o SID real a partir do stat
 
 ## Scripts
 
-| Script | Descrição |
-|--------|-----------|
-| `npm run build` | Copia src/ para dist/ |
-| `npm start` | Executa CLI (requer build) |
-| `npm run dev` | Executa com auto-reload (nodemon) |
-| `npm test` | Executa testes (Jest) |
-| `npm run lint` | ESLint |
-| `npm run format` | Prettier |
+| Script           | Descrição                         |
+| ---------------- | --------------------------------- |
+| `npm run build`  | Copia src/ para dist/             |
+| `npm start`      | Executa CLI (requer build)        |
+| `npm run dev`    | Executa com auto-reload (nodemon) |
+| `npm test`       | Executa testes (Jest)             |
+| `npm run lint`   | ESLint                            |
+| `npm run format` | Prettier                          |
