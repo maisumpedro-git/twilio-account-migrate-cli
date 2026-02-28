@@ -1,10 +1,9 @@
 {
-  "name": "twilio-cli-dashboard",
-  "version": "2.1.0",
-  "description": "Painel CLI para gerenciamento de contas Twilio entre ambientes (dev, stage, prod). Cadastro de contas, download de recursos, comparação de ambientes, migração com replace de SID e pesquisa.",
+  "name": "twilio-account-migrate",
+  "version": "3.0.0",
+  "description": "CLI para gerenciamento de recursos Twilio via migrations entre ambientes (dev, stage, prod). Pull, push, diff e revert com historico de alteracoes e suporte a CI/CD.",
   "main": "index.js",
   "bin": {
-    "twilio-dashboard": "dist/index.js",
     "tam": "dist/index.js"
   },
   "scripts": {
