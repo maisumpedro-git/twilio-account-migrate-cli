@@ -132,6 +132,52 @@ describe('executeMigration', () => {
     globalThis.setTimeout.mockRestore();
   });
 
+  test('skips operations before startIndex', async () => {
+    executeOperation.mockResolvedValueOnce({ sid: 'WQ3', friendlyName: 'Q3' });
+
+    const migration = {
+      operations: [
+        { action: 'create', type: 'taskQueues', data: { friendlyName: 'Q1' } },
+        { action: 'create', type: 'taskQueues', data: { friendlyName: 'Q2' } },
+        { action: 'create', type: 'taskQueues', data: { friendlyName: 'Q3' } },
+      ],
+    };
+
+    const results = await executeMigration(mockApi, migration, state, 'WS1', { startIndex: 2 });
+    expect(executeOperation).toHaveBeenCalledTimes(1);
+    expect(results).toHaveLength(1);
+    expect(results[0].result.friendlyName).toBe('Q3');
+  });
+
+  test('calls onProgress after each successful operation', async () => {
+    executeOperation
+      .mockResolvedValueOnce({ sid: 'WQ1', friendlyName: 'Q1' })
+      .mockResolvedValueOnce({ sid: 'WQ2', friendlyName: 'Q2' });
+
+    const onProgress = jest.fn();
+    const migration = {
+      operations: [
+        { action: 'create', type: 'taskQueues', data: { friendlyName: 'Q1' } },
+        { action: 'create', type: 'taskQueues', data: { friendlyName: 'Q2' } },
+      ],
+    };
+
+    await executeMigration(mockApi, migration, state, 'WS1', { onProgress });
+    expect(onProgress).toHaveBeenCalledTimes(2);
+    expect(onProgress).toHaveBeenCalledWith(0, 2);
+    expect(onProgress).toHaveBeenCalledWith(1, 2);
+  });
+
+  test('does not call onProgress in dry-run mode', async () => {
+    const onProgress = jest.fn();
+    const migration = {
+      operations: [{ action: 'create', type: 'taskQueues', data: { friendlyName: 'Q1' } }],
+    };
+
+    await executeMigration(mockApi, migration, state, 'WS1', { dryRun: true, onProgress });
+    expect(onProgress).not.toHaveBeenCalled();
+  });
+
   test('no delay in dry-run mode', async () => {
     const delays = [];
     jest.spyOn(globalThis, 'setTimeout').mockImplementation((fn, ms) => {

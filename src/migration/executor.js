@@ -9,7 +9,7 @@ export async function executeMigration(
   migration,
   state,
   workspaceSid,
-  { dryRun = false } = {},
+  { dryRun = false, startIndex = 0, onProgress } = {},
 ) {
   const runtimeSids = {};
   const results = [];
@@ -17,6 +17,8 @@ export async function executeMigration(
   for (let i = 0; i < migration.operations.length; i++) {
     const operation = migration.operations[i];
     const resolved = resolveRefs(operation, state, runtimeSids);
+
+    if (i < startIndex) continue;
 
     if (dryRun) {
       results.push({ operation: resolved, status: 'dry-run' });
@@ -31,6 +33,8 @@ export async function executeMigration(
       const name = operation.data.friendlyName || operation.data.uniqueName;
       runtimeSids[`${operation.type}:${name}`] = result.sid;
     }
+
+    if (onProgress) onProgress(i, migration.operations.length);
 
     // Wait 1s between API operations (not after last)
     if (i < migration.operations.length - 1) {
