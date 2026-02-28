@@ -1,0 +1,70 @@
+import { ensureDir, writeJson } from 'fs-extra';
+import path from 'node:path';
+
+import { loadEnvFile } from '../config.js';
+import { generateMigration } from '../migration/generator.js';
+import { markApplied } from '../migration/tracker.js';
+import { readAllStates } from '../state/reader.js';
+import { writeState } from '../state/writer.js';
+import { fetchResource, RESOURCE_TYPES } from '../twilio/fetchers.js';
+import { info, success, warn } from '../utils/display.js';
+
+function timestamp() {
+  const now = new Date();
+  const d = now.toISOString().replace(/[-:T]/g, '').slice(0, 8);
+  const t = now.toISOString().replace(/[-:T]/g, '').slice(8, 14);
+  return `${d}_${t}`;
+}
+
+export async function pullCommand(options) {
+  const { dir, envFile, resources } = options;
+  const account = loadEnvFile(envFile);
+  const types = resources
+    ? resources.split(',').map((t) => t.trim())
+    : RESOURCE_TYPES.filter((t) => t !== 'workspace');
+
+  info(`Baixando recursos do cloud...`);
+
+  // Fetch from cloud
+  const cloudData = {};
+  for (const type of types) {
+    cloudData[type] = await fetchResource(account, type);
+  }
+
+  // Read local state
+  const localStates = await readAllStates(dir);
+
+  // Generate migration
+  const migration = generateMigration(cloudData, localStates, types);
+
+  if (!migration) {
+    success('Nenhuma alteracao detectada.');
+    return;
+  }
+
+  // Save migration file
+  const migrationsDir = path.join(dir, 'migrations');
+  await ensureDir(migrationsDir);
+  const fileName = `${timestamp()}_pull-changes.json`;
+  await writeJson(path.join(migrationsDir, fileName), migration, { spaces: 2 });
+
+  // Mark as applied (cloud state is already in sync)
+  await markApplied(dir, fileName);
+
+  // Update local state with cloud data
+  for (const type of types) {
+    const res = Array.isArray(cloudData[type])
+      ? cloudData[type]
+      : cloudData[type]
+        ? [cloudData[type]]
+        : [];
+    await writeState(dir, type, res);
+  }
+
+  success(`Migration gerada: ${fileName}`);
+  info(`${migration.operations.length} operacao(oes) detectada(s).`);
+  for (const op of migration.operations) {
+    const name = op.data?.friendlyName || op.match?.friendlyName || '?';
+    console.log(`  ${op.action} ${op.type}: ${name}`);
+  }
+}
