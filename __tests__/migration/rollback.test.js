@@ -47,3 +47,62 @@ describe('generateRollback', () => {
     expect(rollback.data.targetWorkers).toBe('1==1');
   });
 });
+
+describe('generateRollback — widgetOps', () => {
+  test('generates inverse widgetOps for partial update', () => {
+    const operation = {
+      action: 'update',
+      type: 'studioFlows',
+      match: { friendlyName: 'Flow A' },
+      mode: 'partial',
+      widgetOps: [
+        { action: 'create_widget', widget: 'NewStep', data: { type: 'send-message' } },
+        { action: 'delete_widget', widget: 'OldStep' },
+        { action: 'update_widget', widget: 'Step1', data: { properties: { body: 'new' } } },
+        { action: 'rename_widget', widget: 'old_name', newName: 'new_name' },
+      ],
+    };
+    const localState = {
+      studioFlows: {
+        resources: [
+          {
+            friendlyName: 'Flow A',
+            definition: {
+              states: {
+                OldStep: { type: 'gather', properties: { timeout: 5 } },
+                Step1: { type: 'send-message', properties: { body: 'old' } },
+                old_name: { type: 'connect-call', properties: {} },
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const rollback = generateRollback(operation, localState);
+    expect(rollback.action).toBe('update');
+    expect(rollback.mode).toBe('partial');
+    expect(rollback.widgetOps).toHaveLength(4);
+
+    // Reversed order
+    expect(rollback.widgetOps[0]).toEqual({
+      action: 'rename_widget',
+      widget: 'new_name',
+      newName: 'old_name',
+    });
+    expect(rollback.widgetOps[1]).toEqual({
+      action: 'update_widget',
+      widget: 'Step1',
+      data: { properties: { body: 'old' } },
+    });
+    expect(rollback.widgetOps[2]).toEqual({
+      action: 'create_widget',
+      widget: 'OldStep',
+      data: { type: 'gather', properties: { timeout: 5 } },
+    });
+    expect(rollback.widgetOps[3]).toEqual({
+      action: 'delete_widget',
+      widget: 'NewStep',
+    });
+  });
+});
