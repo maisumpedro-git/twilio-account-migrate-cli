@@ -39,12 +39,9 @@ export async function diffEnvCommand(options) {
     sourceData[type] = sourceStates[type]?.resources || [];
   }
 
-  // Build @ref map from source and replace SIDs/URLs before generating migration
-  const allStatesForRef = {};
-  for (const type of types) {
-    allStatesForRef[type] = { resources: sourceData[type] };
-  }
-  const refMap = buildRefMap(allStatesForRef, serverlessResources);
+  // Build @ref map from ALL source states (not just filtered types)
+  // because resources like studioFlows can reference SIDs from taskQueues, workflows, etc.
+  const refMap = buildRefMap(sourceStates, serverlessResources);
 
   const refSourceData = {};
   for (const type of types) {

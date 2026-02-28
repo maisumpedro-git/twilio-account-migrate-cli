@@ -124,6 +124,106 @@ describe('diffEnvCommand — @ref replacement', () => {
     }
   });
 
+  test('replaces SIDs inside widgetOps using full source state (not just filtered types)', async () => {
+    // Source: studioFlow with a widget referencing a taskQueue SID
+    const sourceTaskQueues = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [{ sid: 'WQ_SRC_111', friendlyName: 'Support', targetWorkers: '1==1' }],
+    };
+    const sourceStudioFlows = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'FW_SRC_111',
+          friendlyName: 'Main IVR',
+          definition: {
+            description: 'Main IVR',
+            initial_state: 'Trigger',
+            states: {
+              Trigger: { name: 'Trigger', type: 'trigger', transitions: [] },
+              enqueue: {
+                name: 'enqueue',
+                type: 'enqueue-call',
+                properties: { queue_sid: 'WQ_SRC_111' },
+                transitions: [],
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    // Target: same flow with different SID for enqueue widget
+    const targetStudioFlows = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'FW_TGT_999',
+          friendlyName: 'Main IVR',
+          definition: {
+            description: 'Main IVR',
+            initial_state: 'Trigger',
+            states: {
+              Trigger: { name: 'Trigger', type: 'trigger', transitions: [] },
+              enqueue: {
+                name: 'enqueue',
+                type: 'enqueue-call',
+                properties: { queue_sid: 'WQ_TGT_999' },
+                transitions: [],
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    mockPathExists.mockImplementation(async (filePath) => {
+      const relevantFiles = [
+        'taskQueues.json',
+        'taskChannels.json',
+        'workflows.json',
+        'workspace.json',
+        'studioFlows.json',
+        'contentTemplates.json',
+        'serverless.json',
+      ];
+      return relevantFiles.some((f) => filePath.endsWith(f));
+    });
+
+    mockReadJson.mockImplementation(async (filePath) => {
+      if (filePath.includes('source') && filePath.endsWith('taskQueues.json'))
+        return sourceTaskQueues;
+      if (filePath.includes('source') && filePath.endsWith('studioFlows.json'))
+        return sourceStudioFlows;
+      if (filePath.includes('target') && filePath.endsWith('studioFlows.json'))
+        return targetStudioFlows;
+      if (filePath.endsWith('serverless.json')) return { fetchedAt: null, resources: [] };
+      return { fetchedAt: null, resources: [] };
+    });
+
+    mockEnsureDir.mockResolvedValue();
+    mockWriteJson.mockResolvedValue();
+
+    // Only requesting studioFlows diff — but widget contains taskQueue SID
+    await diffEnvCommand({
+      source: './env/source',
+      target: './env/target',
+      resources: 'studioFlows',
+    });
+
+    expect(mockWriteJson).toHaveBeenCalled();
+
+    const [, migration] = mockWriteJson.mock.calls[0];
+    const flowOp = migration.operations.find(
+      (op) => op.type === 'studioFlows' && (op.widgetOps || op.data),
+    );
+
+    // The key assertion: no source SID should appear, even when taskQueues was not in --resources
+    const opStr = JSON.stringify(flowOp);
+    expect(opStr).not.toContain('WQ_SRC_111');
+    expect(opStr).toContain('@ref:taskQueues:Support');
+  });
+
   test('replaces serverless URLs with @ref in source data', async () => {
     const sourceServerless = {
       fetchedAt: '2026-02-28T00:00:00.000Z',
