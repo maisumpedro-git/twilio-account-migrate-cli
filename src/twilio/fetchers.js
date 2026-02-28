@@ -1,5 +1,13 @@
-import { setCachedResource } from './cache.js';
-import { createClient } from './twilioClients.js';
+import { createClient } from './clients.js';
+
+export const RESOURCE_TYPES = [
+  'workspace',
+  'taskQueues',
+  'taskChannels',
+  'workflows',
+  'studioFlows',
+  'contentTemplates',
+];
 
 async function fetchWorkspace(api) {
   const workspaces = await api.taskrouter.v1.workspaces.list({ limit: 50 });
@@ -178,7 +186,6 @@ export async function fetchResource(account, resourceType) {
       throw new Error(`Tipo de recurso desconhecido: ${resourceType}`);
   }
 
-  setCachedResource(account.name, resourceType, data);
   return data;
 }
 
@@ -197,13 +204,6 @@ export async function fetchAllResources(account) {
   ]);
 
   const resources = { workspace, taskQueues, taskChannels, workflows, studioFlows, contentTemplates };
-
-  setCachedResource(account.name, 'workspace', workspace);
-  setCachedResource(account.name, 'taskQueues', taskQueues);
-  setCachedResource(account.name, 'taskChannels', taskChannels);
-  setCachedResource(account.name, 'workflows', workflows);
-  setCachedResource(account.name, 'studioFlows', studioFlows);
-  setCachedResource(account.name, 'contentTemplates', contentTemplates);
 
   return resources;
 }
