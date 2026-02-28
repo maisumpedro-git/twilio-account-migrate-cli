@@ -54,9 +54,7 @@ describe('validateMigration', () => {
 
   test('rejects update without match.friendlyName', () => {
     const migration = {
-      operations: [
-        { action: 'update', type: 'taskQueues', data: { targetWorkers: '1==1' } },
-      ],
+      operations: [{ action: 'update', type: 'taskQueues', data: { targetWorkers: '1==1' } }],
     };
     expect(() => validateMigration(migration)).toThrow('match');
   });

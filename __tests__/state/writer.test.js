@@ -1,6 +1,7 @@
 // __tests__/state/writer.test.js
-import { jest } from '@jest/globals';
 import path from 'node:path';
+
+import { jest } from '@jest/globals';
 
 jest.unstable_mockModule('fs-extra', () => ({
   ensureDir: jest.fn(),

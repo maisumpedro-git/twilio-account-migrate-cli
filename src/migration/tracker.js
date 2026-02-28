@@ -1,6 +1,7 @@
 // src/migration/tracker.js
-import { ensureDir, readdir, readJson } from 'fs-extra';
 import path from 'node:path';
+
+import { ensureDir, readdir, readJson } from 'fs-extra';
 
 import { readMigrationsTracker } from '../state/reader.js';
 import { writeMigrationsTracker } from '../state/writer.js';

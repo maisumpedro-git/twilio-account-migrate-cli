@@ -51,13 +51,11 @@ async function fetchTaskChannels(api, workspaceSid) {
   const channels = await api.taskrouter.v1
     .workspaces(workspaceSid)
     .taskChannels.list({ limit: 1000 });
-  return channels.map(
-    ({ sid, friendlyName, friendly_name, uniqueName, unique_name }) => ({
-      sid,
-      friendlyName: friendlyName || friendly_name,
-      uniqueName: uniqueName || unique_name,
-    }),
-  );
+  return channels.map(({ sid, friendlyName, friendly_name, uniqueName, unique_name }) => ({
+    sid,
+    friendlyName: friendlyName || friendly_name,
+    uniqueName: uniqueName || unique_name,
+  }));
 }
 
 async function fetchWorkflows(api, workspaceSid) {
@@ -203,7 +201,14 @@ export async function fetchAllResources(account) {
     fetchContentTemplates(api),
   ]);
 
-  const resources = { workspace, taskQueues, taskChannels, workflows, studioFlows, contentTemplates };
+  const resources = {
+    workspace,
+    taskQueues,
+    taskChannels,
+    workflows,
+    studioFlows,
+    contentTemplates,
+  };
 
   return resources;
 }

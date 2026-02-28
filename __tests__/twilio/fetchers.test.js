@@ -10,7 +10,14 @@ const { fetchResource, fetchAllResources, RESOURCE_TYPES } = await import(
 );
 const { createClient } = await import('../../src/twilio/clients.js');
 
-function buildMockApi({ workspaces = [], taskQueues = [], taskChannels = [], workflows = [], studioFlows = [], contentTemplates = [] } = {}) {
+function buildMockApi({
+  workspaces = [],
+  taskQueues = [],
+  taskChannels = [],
+  workflows = [],
+  studioFlows = [],
+  contentTemplates = [],
+} = {}) {
   const workspaceFn = jest.fn((wsSid) => ({
     taskQueues: { list: jest.fn().mockResolvedValue(taskQueues) },
     taskChannels: { list: jest.fn().mockResolvedValue(taskChannels) },
@@ -182,9 +189,7 @@ describe('fetchResource', () => {
 
   test('throws on unknown resource type', async () => {
     createClient.mockReturnValue({});
-    await expect(fetchResource(account, 'unknown')).rejects.toThrow(
-      'Tipo de recurso desconhecido',
-    );
+    await expect(fetchResource(account, 'unknown')).rejects.toThrow('Tipo de recurso desconhecido');
   });
 
   test('does not call any cache functions', async () => {
@@ -209,11 +214,44 @@ describe('fetchAllResources', () => {
   test('fetches all resource types in parallel', async () => {
     const mockApi = buildMockApi({
       workspaces: [{ sid: 'WS1', friendlyName: 'My Workspace' }],
-      taskQueues: [{ sid: 'WQ1', friendlyName: 'Queue A', targetWorkers: '1==1', maxReservedWorkers: 5, taskOrder: 'FIFO' }],
+      taskQueues: [
+        {
+          sid: 'WQ1',
+          friendlyName: 'Queue A',
+          targetWorkers: '1==1',
+          maxReservedWorkers: 5,
+          taskOrder: 'FIFO',
+        },
+      ],
       taskChannels: [{ sid: 'TC1', friendlyName: 'Voice', uniqueName: 'voice' }],
-      workflows: [{ sid: 'WW1', friendlyName: 'Default', configuration: '{}', taskReservationTimeout: 120, assignmentCallbackUrl: '' }],
-      studioFlows: [{ sid: 'FW1', friendlyName: 'Main Flow', status: 'published', commitMessage: 'v1', definition: { states: [] } }],
-      contentTemplates: [{ sid: 'HX1', friendlyName: 'Welcome', uniqueName: 'welcome', types: {}, variables: {}, language: 'en' }],
+      workflows: [
+        {
+          sid: 'WW1',
+          friendlyName: 'Default',
+          configuration: '{}',
+          taskReservationTimeout: 120,
+          assignmentCallbackUrl: '',
+        },
+      ],
+      studioFlows: [
+        {
+          sid: 'FW1',
+          friendlyName: 'Main Flow',
+          status: 'published',
+          commitMessage: 'v1',
+          definition: { states: [] },
+        },
+      ],
+      contentTemplates: [
+        {
+          sid: 'HX1',
+          friendlyName: 'Welcome',
+          uniqueName: 'welcome',
+          types: {},
+          variables: {},
+          language: 'en',
+        },
+      ],
     });
     createClient.mockReturnValue(mockApi);
 

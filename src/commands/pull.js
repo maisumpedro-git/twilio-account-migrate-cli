@@ -1,5 +1,6 @@
-import { ensureDir, writeJson } from 'fs-extra';
 import path from 'node:path';
+
+import { ensureDir, writeJson } from 'fs-extra';
 
 import { loadEnvFile } from '../config.js';
 import { generateMigration } from '../migration/generator.js';
@@ -7,7 +8,7 @@ import { markApplied } from '../migration/tracker.js';
 import { readAllStates } from '../state/reader.js';
 import { writeState } from '../state/writer.js';
 import { fetchResource, RESOURCE_TYPES } from '../twilio/fetchers.js';
-import { info, success, warn } from '../utils/display.js';
+import { info, success } from '../utils/display.js';
 
 function timestamp() {
   const now = new Date();

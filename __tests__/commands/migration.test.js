@@ -16,9 +16,7 @@ jest.unstable_mockModule('../../src/utils/display.js', () => ({
   success: jest.fn(),
 }));
 
-const { createMigration, listMigrationsCommand } = await import(
-  '../../src/commands/migration.js'
-);
+const { createMigration, listMigrationsCommand } = await import('../../src/commands/migration.js');
 const { ensureDir, writeJson } = await import('fs-extra');
 const { listMigrations } = await import('../../src/migration/tracker.js');
 const { info } = await import('../../src/utils/display.js');

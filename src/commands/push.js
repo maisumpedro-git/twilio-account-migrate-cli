@@ -6,7 +6,7 @@ import { readAllStates } from '../state/reader.js';
 import { writeState } from '../state/writer.js';
 import { createClient } from '../twilio/clients.js';
 import { fetchResource } from '../twilio/fetchers.js';
-import { error, info, success, warn } from '../utils/display.js';
+import { info, success, warn } from '../utils/display.js';
 
 export async function pushCommand(options) {
   const { dir, envFile, dryRun } = options;

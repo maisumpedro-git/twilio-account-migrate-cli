@@ -1,6 +1,7 @@
 // src/state/writer.js
-import { ensureDir, writeJson } from 'fs-extra';
 import path from 'node:path';
+
+import { ensureDir, writeJson } from 'fs-extra';
 
 export async function writeState(dir, resourceType, resources) {
   const stateDir = path.join(dir, 'state');

@@ -45,9 +45,7 @@ describe('executeMigration', () => {
     resolveRefs.mockImplementation((obj) => obj);
 
     const migration = {
-      operations: [
-        { action: 'create', type: 'taskQueues', data: { friendlyName: 'Queue A' } },
-      ],
+      operations: [{ action: 'create', type: 'taskQueues', data: { friendlyName: 'Queue A' } }],
     };
 
     await executeMigration(mockApi, migration, state, 'WS1');
@@ -96,9 +94,7 @@ describe('executeMigration', () => {
     executeOperation.mockResolvedValueOnce({ sid: 'WQ_NEW', friendlyName: 'Queue A' });
 
     const migration = {
-      operations: [
-        { action: 'create', type: 'taskQueues', data: { friendlyName: 'Queue A' } },
-      ],
+      operations: [{ action: 'create', type: 'taskQueues', data: { friendlyName: 'Queue A' } }],
     };
 
     const results = await executeMigration(mockApi, migration, state, 'WS1');

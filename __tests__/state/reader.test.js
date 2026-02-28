@@ -1,6 +1,7 @@
 // __tests__/state/reader.test.js
-import { jest } from '@jest/globals';
 import path from 'node:path';
+
+import { jest } from '@jest/globals';
 
 jest.unstable_mockModule('fs-extra', () => ({
   pathExists: jest.fn(),
