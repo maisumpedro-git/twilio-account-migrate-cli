@@ -5,7 +5,8 @@ import fsExtra from 'fs-extra';
 const { ensureDir, writeJson } = fsExtra;
 
 import { generateMigration } from '../migration/generator.js';
-import { readAllStates } from '../state/reader.js';
+import { buildRefMap, deepReplaceWithRefs } from '../sid/auto-ref.js';
+import { readAllStates, readState } from '../state/reader.js';
 import { RESOURCE_TYPES } from '../twilio/fetchers.js';
 import { info, success } from '../utils/display.js';
 
@@ -27,6 +28,10 @@ export async function diffEnvCommand(options) {
   const sourceStates = await readAllStates(source);
   const targetStates = await readAllStates(target);
 
+  // Read serverless state from source (for SID/URL → @ref mapping)
+  const sourceServerless = await readState(source, 'serverless');
+  const serverlessResources = sourceServerless?.resources || [];
+
   // Source is the "desired" state (like cloud in pull)
   // Target is the "current" state (like local in pull)
   const sourceData = {};
@@ -34,7 +39,19 @@ export async function diffEnvCommand(options) {
     sourceData[type] = sourceStates[type]?.resources || [];
   }
 
-  const migration = generateMigration(sourceData, targetStates, types, 'env-diff');
+  // Build @ref map from source and replace SIDs/URLs before generating migration
+  const allStatesForRef = {};
+  for (const type of types) {
+    allStatesForRef[type] = { resources: sourceData[type] };
+  }
+  const refMap = buildRefMap(allStatesForRef, serverlessResources);
+
+  const refSourceData = {};
+  for (const type of types) {
+    refSourceData[type] = deepReplaceWithRefs(sourceData[type], refMap);
+  }
+
+  const migration = generateMigration(refSourceData, targetStates, types, 'env-diff');
 
   if (!migration) {
     success('Nenhuma diferenca detectada entre os ambientes.');
