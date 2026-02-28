@@ -2,6 +2,8 @@ import { executeOperation } from '../twilio/writers.js';
 
 import { resolveRefs } from './resolver.js';
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function executeMigration(
   api,
   migration,
@@ -12,7 +14,8 @@ export async function executeMigration(
   const runtimeSids = {};
   const results = [];
 
-  for (const operation of migration.operations) {
+  for (let i = 0; i < migration.operations.length; i++) {
+    const operation = migration.operations[i];
     const resolved = resolveRefs(operation, state, runtimeSids);
 
     if (dryRun) {
@@ -27,6 +30,11 @@ export async function executeMigration(
     if (operation.action === 'create' && result.sid) {
       const name = operation.data.friendlyName || operation.data.uniqueName;
       runtimeSids[`${operation.type}:${name}`] = result.sid;
+    }
+
+    // Wait 1s between API operations (not after last)
+    if (i < migration.operations.length - 1) {
+      await sleep(1000);
     }
   }
 

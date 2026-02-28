@@ -103,4 +103,52 @@ describe('executeMigration', () => {
     expect(results[0]).toHaveProperty('result');
     expect(results[0].result.sid).toBe('WQ_NEW');
   });
+
+  test('waits 1 second between API operations (not after last)', async () => {
+    const delays = [];
+    const originalSetTimeout = globalThis.setTimeout;
+    jest.spyOn(globalThis, 'setTimeout').mockImplementation((fn, ms) => {
+      delays.push(ms);
+      return originalSetTimeout(fn, 0); // don't actually wait
+    });
+
+    executeOperation
+      .mockResolvedValueOnce({ sid: 'WQ1', friendlyName: 'Q1' })
+      .mockResolvedValueOnce({ sid: 'WQ2', friendlyName: 'Q2' })
+      .mockResolvedValueOnce({ sid: 'WQ3', friendlyName: 'Q3' });
+
+    const migration = {
+      operations: [
+        { action: 'create', type: 'taskQueues', data: { friendlyName: 'Q1' } },
+        { action: 'create', type: 'taskQueues', data: { friendlyName: 'Q2' } },
+        { action: 'create', type: 'taskQueues', data: { friendlyName: 'Q3' } },
+      ],
+    };
+
+    await executeMigration(mockApi, migration, state, 'WS1');
+    // 2 delays (between op1→op2 and op2→op3), not after op3
+    expect(delays.filter((d) => d === 1000)).toHaveLength(2);
+
+    globalThis.setTimeout.mockRestore();
+  });
+
+  test('no delay in dry-run mode', async () => {
+    const delays = [];
+    jest.spyOn(globalThis, 'setTimeout').mockImplementation((fn, ms) => {
+      delays.push(ms);
+      return fn();
+    });
+
+    const migration = {
+      operations: [
+        { action: 'create', type: 'taskQueues', data: { friendlyName: 'Q1' } },
+        { action: 'create', type: 'taskQueues', data: { friendlyName: 'Q2' } },
+      ],
+    };
+
+    await executeMigration(mockApi, migration, state, 'WS1', { dryRun: true });
+    expect(delays.filter((d) => d === 1000)).toHaveLength(0);
+
+    globalThis.setTimeout.mockRestore();
+  });
 });
