@@ -60,3 +60,66 @@ describe('resolveRefs', () => {
     expect(result.queue).toBe('WQ_OVERRIDE');
   });
 });
+
+describe('resolveRefs — serverless patterns', () => {
+  const state = {
+    taskQueues: { resources: [{ sid: 'WQ111', friendlyName: 'Support' }] },
+    serverless: {
+      resources: [
+        {
+          sid: 'ZS111',
+          uniqueName: 'my-service',
+          environments: [
+            { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
+          ],
+          functions: [{ sid: 'ZH333', friendlyName: 'my-fn', path: '/my-fn' }],
+        },
+      ],
+    },
+  };
+
+  test('resolves @ref:serverless:serviceName to service SID', () => {
+    const obj = { service: '@ref:serverless:my-service' };
+    const result = resolveRefs(obj, state);
+    expect(result.service).toBe('ZS111');
+  });
+
+  test('resolves @ref:serverlessEnv:serviceName:envName to environment SID', () => {
+    const obj = { env: '@ref:serverlessEnv:my-service:production' };
+    const result = resolveRefs(obj, state);
+    expect(result.env).toBe('ZE222');
+  });
+
+  test('resolves @ref:serverlessFn:serviceName:fnName to function SID', () => {
+    const obj = { fn: '@ref:serverlessFn:my-service:my-fn' };
+    const result = resolveRefs(obj, state);
+    expect(result.fn).toBe('ZH333');
+  });
+
+  test('resolves @ref:serverlessUrl:serviceName:envName:/path to full URL', () => {
+    const obj = { url: '@ref:serverlessUrl:my-service:production:/my-fn' };
+    const result = resolveRefs(obj, state);
+    expect(result.url).toBe('https://my-service-1234.twil.io/my-fn');
+  });
+
+  test('throws when serverless service is not found', () => {
+    const obj = { service: '@ref:serverless:nonexistent' };
+    expect(() => resolveRefs(obj, state)).toThrow('Referencia nao resolvida');
+  });
+
+  test('resolves mixed ref types in nested object', () => {
+    const obj = {
+      config: {
+        queue: '@ref:taskQueues:Support',
+        webhook: '@ref:serverlessUrl:my-service:production:/my-fn',
+        nested: {
+          serviceSid: '@ref:serverless:my-service',
+        },
+      },
+    };
+    const result = resolveRefs(obj, state);
+    expect(result.config.queue).toBe('WQ111');
+    expect(result.config.webhook).toBe('https://my-service-1234.twil.io/my-fn');
+    expect(result.config.nested.serviceSid).toBe('ZS111');
+  });
+});
