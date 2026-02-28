@@ -14,6 +14,9 @@ export async function getPendingMigrations(dir) {
   const files = (await readdir(migrationsDir)).filter((f) => f.endsWith('.json')).sort();
   const tracker = await readMigrationsTracker(dir);
   const appliedNames = new Set(tracker.applied.map((a) => a.name));
+  if (tracker.partiallyApplied) {
+    appliedNames.add(tracker.partiallyApplied.name);
+  }
   return files.filter((f) => !appliedNames.has(f));
 }
 
@@ -35,14 +38,62 @@ export async function listMigrations(dir) {
   const files = (await readdir(migrationsDir)).filter((f) => f.endsWith('.json')).sort();
   const tracker = await readMigrationsTracker(dir);
   const appliedMap = new Map(tracker.applied.map((a) => [a.name, a.appliedAt]));
+  const partialName = tracker.partiallyApplied?.name;
 
-  return files.map((name) => ({
-    name,
-    status: appliedMap.has(name) ? 'applied' : 'pending',
-    appliedAt: appliedMap.get(name) || null,
-  }));
+  return files.map((name) => {
+    if (name === partialName) {
+      const p = tracker.partiallyApplied;
+      return {
+        name,
+        status: 'partially_applied',
+        appliedAt: null,
+        progress: `${p.lastOperationIndex}/${p.totalOperations}`,
+      };
+    }
+    return {
+      name,
+      status: appliedMap.has(name) ? 'applied' : 'pending',
+      appliedAt: appliedMap.get(name) || null,
+    };
+  });
 }
 
 export async function readMigrationFile(dir, name) {
   return readJson(path.join(dir, 'migrations', name));
+}
+
+export async function markPartiallyApplied(dir, name, lastOperationIndex, totalOperations, error) {
+  const tracker = await readMigrationsTracker(dir);
+  const existing = tracker.partiallyApplied;
+  tracker.partiallyApplied = {
+    name,
+    startedAt: existing?.name === name ? existing.startedAt : new Date().toISOString(),
+    lastOperationIndex,
+    totalOperations,
+    error,
+  };
+  await writeMigrationsTracker(dir, tracker);
+}
+
+export async function getPartiallyApplied(dir) {
+  const tracker = await readMigrationsTracker(dir);
+  return tracker.partiallyApplied || null;
+}
+
+export async function promotePartialToApplied(dir) {
+  const tracker = await readMigrationsTracker(dir);
+  if (tracker.partiallyApplied) {
+    tracker.applied.push({
+      name: tracker.partiallyApplied.name,
+      appliedAt: new Date().toISOString(),
+    });
+    delete tracker.partiallyApplied;
+  }
+  await writeMigrationsTracker(dir, tracker);
+}
+
+export async function clearPartiallyApplied(dir) {
+  const tracker = await readMigrationsTracker(dir);
+  delete tracker.partiallyApplied;
+  await writeMigrationsTracker(dir, tracker);
 }
