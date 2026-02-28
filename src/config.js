@@ -1,33 +1,5 @@
 import { readFileSync } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-
-let baseDir = path.join(os.homedir(), '.twilio-cli-dashboard');
-let envAccount = null;
-
-export function setBaseDir(dir) {
-  baseDir = path.resolve(dir);
-}
-
-export function getBaseDir() {
-  return baseDir;
-}
-
-export function getStoreDir() {
-  return baseDir;
-}
-
-export function getStoreFile() {
-  return path.join(baseDir, 'accounts.enc');
-}
-
-export function getCacheBaseDir() {
-  return path.join(baseDir, 'cache');
-}
-
-export function getVarsDir() {
-  return path.join(baseDir, 'variables');
-}
 
 export function loadEnvFile(filePath) {
   const content = readFileSync(path.resolve(filePath), 'utf8');
@@ -46,24 +18,16 @@ export function loadEnvFile(filePath) {
     vars[key] = val;
   }
 
-  const account = {
-    name: vars.TWILIO_ACCOUNT_NAME || 'env-account',
-    environment: vars.TWILIO_ENVIRONMENT || 'dev',
-    accountSid: vars.TWILIO_ACCOUNT_SID || '',
-    apiKeySid: vars.TWILIO_API_KEY_SID || '',
-    apiKeySecret: vars.TWILIO_API_KEY_SECRET || '',
-  };
+  const required = ['TWILIO_ACCOUNT_SID', 'TWILIO_API_KEY_SID', 'TWILIO_API_KEY_SECRET'];
+  const missing = required.filter((k) => !vars[k]);
 
-  if (!account.accountSid || !account.apiKeySid || !account.apiKeySecret) {
-    throw new Error(
-      'Arquivo .env deve conter TWILIO_ACCOUNT_SID, TWILIO_API_KEY_SID e TWILIO_API_KEY_SECRET',
-    );
+  if (missing.length > 0) {
+    throw new Error(`Missing required .env variables: ${missing.join(', ')}`);
   }
 
-  envAccount = account;
-  return account;
-}
-
-export function getEnvAccount() {
-  return envAccount;
+  return {
+    accountSid: vars.TWILIO_ACCOUNT_SID,
+    apiKeySid: vars.TWILIO_API_KEY_SID,
+    apiKeySecret: vars.TWILIO_API_KEY_SECRET,
+  };
 }
