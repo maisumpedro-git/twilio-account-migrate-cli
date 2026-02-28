@@ -1,7 +1,9 @@
 // src/commands/migration.js
 import path from 'node:path';
 
-import { ensureDir, writeJson } from 'fs-extra';
+import fsExtra from 'fs-extra';
+
+const { ensureDir, writeJson } = fsExtra;
 
 import { listMigrations } from '../migration/tracker.js';
 import { info } from '../utils/display.js';

@@ -3,13 +3,17 @@ import path from 'node:path';
 
 import { jest } from '@jest/globals';
 
-jest.unstable_mockModule('fs-extra', () => ({
+const mockFsExtra = {
   pathExists: jest.fn(),
   readJson: jest.fn(),
+};
+jest.unstable_mockModule('fs-extra', () => ({
+  default: mockFsExtra,
+  ...mockFsExtra,
 }));
 
 const { readState, readMigrationsTracker } = await import('../../src/state/reader.js');
-const { pathExists, readJson } = await import('fs-extra');
+const { pathExists, readJson } = mockFsExtra;
 
 describe('readState', () => {
   beforeEach(() => jest.clearAllMocks());

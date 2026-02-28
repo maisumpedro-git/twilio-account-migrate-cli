@@ -1,10 +1,14 @@
 // __tests__/commands/migration.test.js
 import { jest } from '@jest/globals';
 
-jest.unstable_mockModule('fs-extra', () => ({
+const mockFsExtra = {
   ensureDir: jest.fn(),
   writeJson: jest.fn(),
   readdir: jest.fn(),
+};
+jest.unstable_mockModule('fs-extra', () => ({
+  default: mockFsExtra,
+  ...mockFsExtra,
 }));
 
 jest.unstable_mockModule('../../src/migration/tracker.js', () => ({
@@ -17,7 +21,7 @@ jest.unstable_mockModule('../../src/utils/display.js', () => ({
 }));
 
 const { createMigration, listMigrationsCommand } = await import('../../src/commands/migration.js');
-const { ensureDir, writeJson } = await import('fs-extra');
+const { ensureDir, writeJson } = mockFsExtra;
 const { listMigrations } = await import('../../src/migration/tracker.js');
 const { info } = await import('../../src/utils/display.js');
 

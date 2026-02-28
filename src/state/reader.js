@@ -1,7 +1,9 @@
 // src/state/reader.js
 import path from 'node:path';
 
-import { pathExists, readJson } from 'fs-extra';
+import fsExtra from 'fs-extra';
+
+const { pathExists, readJson } = fsExtra;
 
 export async function readState(dir, resourceType) {
   const filePath = path.join(dir, 'state', `${resourceType}.json`);

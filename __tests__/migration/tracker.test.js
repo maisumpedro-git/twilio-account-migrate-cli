@@ -1,12 +1,16 @@
 // __tests__/migration/tracker.test.js
 import { jest } from '@jest/globals';
 
-jest.unstable_mockModule('fs-extra', () => ({
+const mockFsExtra = {
   pathExists: jest.fn(),
   readJson: jest.fn(),
   readdir: jest.fn(),
   ensureDir: jest.fn(),
   writeJson: jest.fn(),
+};
+jest.unstable_mockModule('fs-extra', () => ({
+  default: mockFsExtra,
+  ...mockFsExtra,
 }));
 
 jest.unstable_mockModule('../../src/state/reader.js', () => ({
@@ -21,7 +25,7 @@ const { getPendingMigrations, markApplied, listMigrations } = await import(
   '../../src/migration/tracker.js'
 );
 const { readMigrationsTracker } = await import('../../src/state/reader.js');
-const { readdir } = await import('fs-extra');
+const { readdir } = mockFsExtra;
 
 describe('getPendingMigrations', () => {
   beforeEach(() => jest.clearAllMocks());

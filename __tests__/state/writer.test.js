@@ -3,13 +3,17 @@ import path from 'node:path';
 
 import { jest } from '@jest/globals';
 
-jest.unstable_mockModule('fs-extra', () => ({
+const mockFsExtra = {
   ensureDir: jest.fn(),
   writeJson: jest.fn(),
+};
+jest.unstable_mockModule('fs-extra', () => ({
+  default: mockFsExtra,
+  ...mockFsExtra,
 }));
 
 const { writeState, writeMigrationsTracker } = await import('../../src/state/writer.js');
-const { ensureDir, writeJson } = await import('fs-extra');
+const { ensureDir, writeJson } = mockFsExtra;
 
 describe('writeState', () => {
   beforeEach(() => jest.clearAllMocks());
