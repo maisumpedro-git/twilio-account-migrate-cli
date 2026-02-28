@@ -113,8 +113,94 @@ async function findSidByName(api, type, name, workspaceSid) {
   return resources[0]?.sid || null;
 }
 
-export async function executeOperation(api, operation, workspaceSid) {
+function deepMerge(target, source) {
+  const result = { ...target };
+  for (const [key, val] of Object.entries(source)) {
+    if (
+      val &&
+      typeof val === 'object' &&
+      !Array.isArray(val) &&
+      target[key] &&
+      typeof target[key] === 'object' &&
+      !Array.isArray(target[key])
+    ) {
+      result[key] = deepMerge(target[key], val);
+    } else {
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
+function applyWidgetOps(definition, widgetOps) {
+  const result = JSON.parse(JSON.stringify(definition));
+  if (!result.states) result.states = {};
+
+  for (const wop of widgetOps) {
+    switch (wop.action) {
+      case 'create_widget':
+        result.states[wop.widget] = { ...wop.data, name: wop.widget };
+        break;
+      case 'delete_widget':
+        delete result.states[wop.widget];
+        break;
+      case 'update_widget':
+        if (result.states[wop.widget]) {
+          result.states[wop.widget] = deepMerge(result.states[wop.widget], wop.data);
+        }
+        break;
+      case 'rename_widget': {
+        const widgetData = result.states[wop.widget];
+        if (widgetData) {
+          delete result.states[wop.widget];
+          widgetData.name = wop.newName;
+          result.states[wop.newName] = widgetData;
+          // Update transition references in all widgets
+          for (const state of Object.values(result.states)) {
+            if (Array.isArray(state.transitions)) {
+              for (const t of state.transitions) {
+                if (t.next?.widget === wop.widget) {
+                  t.next.widget = wop.newName;
+                }
+              }
+            }
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  return result;
+}
+
+export async function executeOperation(api, operation, workspaceSid, state) {
   const { action, type, match, data } = operation;
+
+  // Handle partial Studio Flow updates
+  if (action === 'update' && operation.mode === 'partial' && operation.widgetOps) {
+    const name = match.friendlyName || match.uniqueName;
+    const sid = await findSidByName(api, type, name, workspaceSid);
+    if (!sid) {
+      throw new Error(`Recurso "${name}" (${type}) nao encontrado no ambiente`);
+    }
+
+    // Get current definition from state
+    const flowResource = state?.[type]?.resources?.find(
+      (r) => r.friendlyName === name || r.uniqueName === name,
+    );
+    if (!flowResource?.definition) {
+      throw new Error(`Definition do flow "${name}" nao encontrada no state local`);
+    }
+
+    const newDefinition = applyWidgetOps(flowResource.definition, operation.widgetOps);
+    const result = await updateStudioFlow(api, workspaceSid, sid, {
+      friendlyName: name,
+      definition: newDefinition,
+    });
+    return { sid: result.sid || sid, friendlyName: name };
+  }
+
   const writer = WRITERS[type]?.[action];
 
   if (!writer) {

@@ -25,7 +25,7 @@ export async function executeMigration(
       continue;
     }
 
-    const result = await executeOperation(api, resolved, workspaceSid);
+    const result = await executeOperation(api, resolved, workspaceSid, state);
     results.push({ operation: resolved, status: 'ok', result });
 
     // Track created SIDs for subsequent @ref resolution
