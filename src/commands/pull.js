@@ -7,6 +7,7 @@ const { ensureDir, writeJson } = fsExtra;
 import { loadEnvFile } from '../config.js';
 import { generateMigration } from '../migration/generator.js';
 import { markApplied } from '../migration/tracker.js';
+import { buildRefMap, deepReplaceWithRefs } from '../sid/auto-ref.js';
 import { readAllStates } from '../state/reader.js';
 import { writeState } from '../state/writer.js';
 import { createClient } from '../twilio/clients.js';
@@ -44,8 +45,27 @@ export async function pullCommand(options) {
   // Read local state
   const localStates = await readAllStates(dir);
 
+  // Build SID/URL → @ref mapping from ALL fetched data
+  const allStatesForRef = {};
+  for (const type of types) {
+    allStatesForRef[type] = {
+      resources: Array.isArray(cloudData[type])
+        ? cloudData[type]
+        : cloudData[type]
+          ? [cloudData[type]]
+          : [],
+    };
+  }
+  const refMap = buildRefMap(allStatesForRef, serverlessResources);
+
+  // Replace SIDs/URLs with @ref in cloud data for migration generation
+  const refCloudData = {};
+  for (const type of types) {
+    refCloudData[type] = deepReplaceWithRefs(cloudData[type], refMap);
+  }
+
   // Generate migration
-  const migration = generateMigration(cloudData, localStates, types);
+  const migration = generateMigration(refCloudData, localStates, types);
 
   if (!migration) {
     success('Nenhuma alteracao detectada.');
