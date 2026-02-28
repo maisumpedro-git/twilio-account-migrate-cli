@@ -195,6 +195,36 @@ describe('getPendingMigrations with partiallyApplied', () => {
   });
 });
 
+describe('markPartiallyApplied with rollback fields', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test('preserves rollback fields when passed', async () => {
+    readMigrationsTracker.mockResolvedValue({
+      applied: [],
+      partiallyApplied: {
+        name: 'mig.json',
+        startedAt: '2026-01-01T00:00:00.000Z',
+        lastOperationIndex: 34,
+        totalOperations: 70,
+        error: 'API Error',
+      },
+    });
+    await markPartiallyApplied('/env/dev', 'mig.json', 34, 70, 'API Error', {
+      rollbackInProgress: true,
+      rollbackLastIndex: 20,
+      rollbackTotal: 34,
+    });
+    expect(writeMigrationsTracker).toHaveBeenCalledWith('/env/dev', {
+      applied: [],
+      partiallyApplied: expect.objectContaining({
+        rollbackInProgress: true,
+        rollbackLastIndex: 20,
+        rollbackTotal: 34,
+      }),
+    });
+  });
+});
+
 describe('listMigrations with partiallyApplied', () => {
   beforeEach(() => jest.clearAllMocks());
 

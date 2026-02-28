@@ -62,7 +62,14 @@ export async function readMigrationFile(dir, name) {
   return readJson(path.join(dir, 'migrations', name));
 }
 
-export async function markPartiallyApplied(dir, name, lastOperationIndex, totalOperations, error) {
+export async function markPartiallyApplied(
+  dir,
+  name,
+  lastOperationIndex,
+  totalOperations,
+  error,
+  rollbackInfo,
+) {
   const tracker = await readMigrationsTracker(dir);
   const existing = tracker.partiallyApplied;
   tracker.partiallyApplied = {
@@ -71,6 +78,7 @@ export async function markPartiallyApplied(dir, name, lastOperationIndex, totalO
     lastOperationIndex,
     totalOperations,
     error,
+    ...(rollbackInfo || {}),
   };
   await writeMigrationsTracker(dir, tracker);
 }
