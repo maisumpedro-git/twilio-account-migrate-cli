@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 
+import { diffEnvCommand } from './commands/diff-env.js';
 import { diffCommand } from './commands/diff.js';
 import { createMigration, listMigrationsCommand } from './commands/migration.js';
 import { pullCommand } from './commands/pull.js';
@@ -13,7 +14,7 @@ const program = new Command();
 program
   .name('tam')
   .description('Twilio Account Migrate — Gerenciamento de recursos Twilio via migrations')
-  .version('3.0.0');
+  .version('4.0.0');
 
 program
   .command('pull')
@@ -51,6 +52,16 @@ program
   .requiredOption('--env-file <path>', 'Caminho para arquivo .env com credenciais')
   .action(async (migrationName, opts) => {
     await revertCommand({ ...opts, migrationName });
+  });
+
+program
+  .command('diff-env')
+  .description('Comparar dois ambientes e gerar migration no target')
+  .requiredOption('--source <path>', 'Diretorio do ambiente de referencia (atualizado)')
+  .requiredOption('--target <path>', 'Diretorio do ambiente a ser atualizado')
+  .option('--resources <types>', 'Tipos de recursos separados por virgula')
+  .action(async (opts) => {
+    await diffEnvCommand(opts);
   });
 
 const migration = program.command('migration').description('Gerenciar migrations');
