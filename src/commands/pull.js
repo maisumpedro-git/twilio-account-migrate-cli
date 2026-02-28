@@ -9,7 +9,8 @@ import { generateMigration } from '../migration/generator.js';
 import { markApplied } from '../migration/tracker.js';
 import { readAllStates } from '../state/reader.js';
 import { writeState } from '../state/writer.js';
-import { fetchResource, RESOURCE_TYPES } from '../twilio/fetchers.js';
+import { createClient } from '../twilio/clients.js';
+import { fetchResource, fetchServerlessServices, RESOURCE_TYPES } from '../twilio/fetchers.js';
 import { info, success } from '../utils/display.js';
 
 function timestamp() {
@@ -33,6 +34,12 @@ export async function pullCommand(options) {
   for (const type of types) {
     cloudData[type] = await fetchResource(account, type);
   }
+
+  // Fetch serverless resources (read-only, for SID/URL mapping)
+  info('Baixando recursos serverless...');
+  const api = createClient(account);
+  const serverlessResources = await fetchServerlessServices(api);
+  await writeState(dir, 'serverless', serverlessResources);
 
   // Read local state
   const localStates = await readAllStates(dir);

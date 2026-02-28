@@ -5,7 +5,7 @@ jest.unstable_mockModule('../../src/twilio/clients.js', () => ({
   createClient: jest.fn(),
 }));
 
-const { fetchResource, fetchAllResources, RESOURCE_TYPES } = await import(
+const { fetchResource, fetchAllResources, fetchServerlessServices, RESOURCE_TYPES } = await import(
   '../../src/twilio/fetchers.js'
 );
 const { createClient } = await import('../../src/twilio/clients.js');
@@ -285,5 +285,71 @@ describe('fetchAllResources', () => {
         'contentTemplates',
       ]),
     );
+  });
+});
+
+describe('fetchServerlessServices', () => {
+  test('fetches services with environments and functions', async () => {
+    const mockApi = {
+      serverless: {
+        v1: {
+          services: {
+            list: jest.fn().mockResolvedValue([
+              { sid: 'ZS111', uniqueName: 'my-service', friendlyName: 'My Service' },
+            ]),
+          },
+        },
+      },
+    };
+    const mockServiceContext = {
+      environments: {
+        list: jest.fn().mockResolvedValue([
+          {
+            sid: 'ZE222',
+            uniqueName: 'production',
+            domainName: 'my-service-1234.twil.io',
+          },
+        ]),
+      },
+      functions: {
+        list: jest.fn().mockResolvedValue([
+          {
+            sid: 'ZH333',
+            friendlyName: 'my-function',
+            path: '/my-function',
+          },
+        ]),
+      },
+    };
+    mockApi.serverless.v1.services = jest.fn().mockReturnValue(mockServiceContext);
+    mockApi.serverless.v1.services.list = jest.fn().mockResolvedValue([
+      { sid: 'ZS111', uniqueName: 'my-service', friendlyName: 'My Service' },
+    ]);
+
+    const result = await fetchServerlessServices(mockApi);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({
+      sid: 'ZS111',
+      uniqueName: 'my-service',
+      friendlyName: 'My Service',
+      environments: [
+        { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
+      ],
+      functions: [{ sid: 'ZH333', friendlyName: 'my-function', path: '/my-function' }],
+    });
+  });
+
+  test('returns empty array when serverless API fails', async () => {
+    const mockApi = {
+      serverless: {
+        v1: {
+          services: {
+            list: jest.fn().mockRejectedValue(new Error('Not found')),
+          },
+        },
+      },
+    };
+    const result = await fetchServerlessServices(mockApi);
+    expect(result).toEqual([]);
   });
 });

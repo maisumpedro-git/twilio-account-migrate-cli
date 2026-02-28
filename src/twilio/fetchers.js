@@ -139,6 +139,37 @@ async function fetchContentTemplates(api) {
   }
 }
 
+async function fetchServerlessServices(api) {
+  try {
+    const services = await api.serverless.v1.services.list({ limit: 100 });
+    const result = [];
+    for (const svc of services) {
+      const [environments, functions] = await Promise.all([
+        api.serverless.v1.services(svc.sid).environments.list({ limit: 100 }),
+        api.serverless.v1.services(svc.sid).functions.list({ limit: 100 }),
+      ]);
+      result.push({
+        sid: svc.sid,
+        uniqueName: svc.uniqueName || svc.unique_name,
+        friendlyName: svc.friendlyName || svc.friendly_name,
+        environments: environments.map((e) => ({
+          sid: e.sid,
+          uniqueName: e.uniqueName || e.unique_name,
+          domainName: e.domainName || e.domain_name,
+        })),
+        functions: functions.map((f) => ({
+          sid: f.sid,
+          friendlyName: f.friendlyName || f.friendly_name,
+          path: f.path,
+        })),
+      });
+    }
+    return result;
+  } catch {
+    return [];
+  }
+}
+
 function tryParseJson(val) {
   if (!val || typeof val !== 'string') return val;
   try {
@@ -212,3 +243,5 @@ export async function fetchAllResources(account) {
 
   return resources;
 }
+
+export { fetchServerlessServices };
