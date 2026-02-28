@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit:*)",
+      "Bash(npm test:*)",
+      "Bash(npx jest:*)",
+      "Bash(git add:*)",
+      "Bash(npx eslint:*)",
+      "Bash(npx prettier:*)"
+    ]
+  }
+}

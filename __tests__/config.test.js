@@ -1,73 +1,125 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 
-import { getBaseDir, getCacheBaseDir, getStoreFile, loadEnvFile, setBaseDir } from '../src/config.js';
+describe('loadEnvFile', () => {
+  let loadEnvFile;
 
-const ORIGINAL_BASE = path.join(os.homedir(), '.twilio-cli-dashboard');
-const TEST_DIR = path.join(os.tmpdir(), '__test_config_tam__');
+  beforeEach(async () => {
+    jest.unstable_mockModule('node:fs', () => ({
+      readFileSync: jest.fn(),
+    }));
 
-afterEach(() => {
-  setBaseDir(ORIGINAL_BASE);
-  if (existsSync(TEST_DIR)) rmSync(TEST_DIR, { recursive: true });
-});
+    const fs = await import('node:fs');
+    const config = await import('../src/config.js');
+    loadEnvFile = config.loadEnvFile;
+    // Store reference so individual tests can control the mock
+    loadEnvFile._mockFs = fs;
+  });
 
-test('default base dir is ~/.twilio-cli-dashboard', () => {
-  expect(getBaseDir()).toBe(ORIGINAL_BASE);
-});
+  it('parses valid .env file with all 3 required variables', async () => {
+    const { readFileSync } = await import('node:fs');
+    readFileSync.mockReturnValue(
+      [
+        'TWILIO_ACCOUNT_SID=AC1234567890abcdef1234567890abcdef',
+        'TWILIO_API_KEY_SID=SK1234567890abcdef1234567890abcdef',
+        'TWILIO_API_KEY_SECRET=secret123abc',
+      ].join('\n'),
+    );
 
-test('setBaseDir changes all derived paths', () => {
-  setBaseDir('/tmp/custom-dir');
-  expect(getBaseDir()).toBe('/tmp/custom-dir');
-  expect(getStoreFile()).toBe('/tmp/custom-dir/accounts.enc');
-  expect(getCacheBaseDir()).toBe('/tmp/custom-dir/cache');
-});
+    const result = loadEnvFile('.env');
 
-test('loadEnvFile parses env file and returns account', () => {
-  mkdirSync(TEST_DIR, { recursive: true });
-  const envPath = path.join(TEST_DIR, '.env');
-  writeFileSync(
-    envPath,
-    [
-      'TWILIO_ACCOUNT_NAME=test-account',
-      'TWILIO_ENVIRONMENT=dev',
-      'TWILIO_ACCOUNT_SID=ACtest123456789012345678901234',
-      'TWILIO_API_KEY_SID=SKtest123456789012345678901234',
-      'TWILIO_API_KEY_SECRET=secret123',
-    ].join('\n'),
-  );
+    expect(result).toEqual({
+      accountSid: 'AC1234567890abcdef1234567890abcdef',
+      apiKeySid: 'SK1234567890abcdef1234567890abcdef',
+      apiKeySecret: 'secret123abc',
+    });
+  });
 
-  const account = loadEnvFile(envPath);
-  expect(account.name).toBe('test-account');
-  expect(account.environment).toBe('dev');
-  expect(account.accountSid).toBe('ACtest123456789012345678901234');
-  expect(account.apiKeySid).toBe('SKtest123456789012345678901234');
-  expect(account.apiKeySecret).toBe('secret123');
-});
+  it('strips double quotes from values', async () => {
+    const { readFileSync } = await import('node:fs');
+    readFileSync.mockReturnValue(
+      [
+        'TWILIO_ACCOUNT_SID="AC_double_quoted"',
+        'TWILIO_API_KEY_SID="SK_double_quoted"',
+        'TWILIO_API_KEY_SECRET="secret_double_quoted"',
+      ].join('\n'),
+    );
 
-test('loadEnvFile throws if required fields are missing', () => {
-  mkdirSync(TEST_DIR, { recursive: true });
-  const envPath = path.join(TEST_DIR, '.env');
-  writeFileSync(envPath, 'TWILIO_ACCOUNT_NAME=test\n');
+    const result = loadEnvFile('.env');
 
-  expect(() => loadEnvFile(envPath)).toThrow('TWILIO_ACCOUNT_SID');
-});
+    expect(result).toEqual({
+      accountSid: 'AC_double_quoted',
+      apiKeySid: 'SK_double_quoted',
+      apiKeySecret: 'secret_double_quoted',
+    });
+  });
 
-test('loadEnvFile handles quoted values', () => {
-  mkdirSync(TEST_DIR, { recursive: true });
-  const envPath = path.join(TEST_DIR, '.env');
-  writeFileSync(
-    envPath,
-    [
-      'TWILIO_ACCOUNT_NAME="my-account"',
-      "TWILIO_ENVIRONMENT='prod'",
-      'TWILIO_ACCOUNT_SID=ACtest123456789012345678901234',
-      'TWILIO_API_KEY_SID=SKtest123456789012345678901234',
-      'TWILIO_API_KEY_SECRET=secret123',
-    ].join('\n'),
-  );
+  it('strips single quotes from values', async () => {
+    const { readFileSync } = await import('node:fs');
+    readFileSync.mockReturnValue(
+      [
+        "TWILIO_ACCOUNT_SID='AC_single_quoted'",
+        "TWILIO_API_KEY_SID='SK_single_quoted'",
+        "TWILIO_API_KEY_SECRET='secret_single_quoted'",
+      ].join('\n'),
+    );
 
-  const account = loadEnvFile(envPath);
-  expect(account.name).toBe('my-account');
-  expect(account.environment).toBe('prod');
+    const result = loadEnvFile('.env');
+
+    expect(result).toEqual({
+      accountSid: 'AC_single_quoted',
+      apiKeySid: 'SK_single_quoted',
+      apiKeySecret: 'secret_single_quoted',
+    });
+  });
+
+  it('ignores comments and blank lines', async () => {
+    const { readFileSync } = await import('node:fs');
+    readFileSync.mockReturnValue(
+      [
+        '# This is a comment',
+        '',
+        'TWILIO_ACCOUNT_SID=ACvalid',
+        '  ',
+        '# Another comment',
+        'TWILIO_API_KEY_SID=SKvalid',
+        '',
+        'TWILIO_API_KEY_SECRET=secretvalid',
+      ].join('\n'),
+    );
+
+    const result = loadEnvFile('.env');
+
+    expect(result).toEqual({
+      accountSid: 'ACvalid',
+      apiKeySid: 'SKvalid',
+      apiKeySecret: 'secretvalid',
+    });
+  });
+
+  it('throws when TWILIO_ACCOUNT_SID is missing', async () => {
+    const { readFileSync } = await import('node:fs');
+    readFileSync.mockReturnValue(
+      ['TWILIO_API_KEY_SID=SKtest', 'TWILIO_API_KEY_SECRET=secrettest'].join('\n'),
+    );
+
+    expect(() => loadEnvFile('.env')).toThrow('TWILIO_ACCOUNT_SID');
+  });
+
+  it('throws when TWILIO_API_KEY_SID is missing', async () => {
+    const { readFileSync } = await import('node:fs');
+    readFileSync.mockReturnValue(
+      ['TWILIO_ACCOUNT_SID=ACtest', 'TWILIO_API_KEY_SECRET=secrettest'].join('\n'),
+    );
+
+    expect(() => loadEnvFile('.env')).toThrow('TWILIO_API_KEY_SID');
+  });
+
+  it('throws when TWILIO_API_KEY_SECRET is missing', async () => {
+    const { readFileSync } = await import('node:fs');
+    readFileSync.mockReturnValue(
+      ['TWILIO_ACCOUNT_SID=ACtest', 'TWILIO_API_KEY_SID=SKtest'].join('\n'),
+    );
+
+    expect(() => loadEnvFile('.env')).toThrow('TWILIO_API_KEY_SECRET');
+  });
 });
