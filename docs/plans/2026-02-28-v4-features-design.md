@@ -8,12 +8,13 @@
 
 ## Overview
 
-Five features organized in two groups:
+Seven features organized in three groups:
 
 - **Group A (Execution Infrastructure)**: Delay (F3), Partially Applied (F4), Partial Rollback (F5)
 - **Group B (New Capabilities)**: Widget Granular Updates (F1), Diff Between Environments (F2)
+- **Group C (SID/URL Portability)**: Serverless Fetch (F6), Auto-Replace SIDs by @ref (F7)
 
-Implementation order: F3 → F4 → F5 → F1 + F2 (parallel)
+Implementation order: F3 → F4 → F5 → F1 + F2 (parallel) → F6 → F7
 
 ---
 
@@ -241,6 +242,91 @@ Generated automatically by existing `generateRollbackAll` logic, using target da
 
 ---
 
+## Feature 6: Fetch Serverless Resources (read-only for replace)
+
+**Files**: `src/twilio/fetchers.js`, `src/state/reader.js`
+
+### Purpose
+
+Fetch Twilio Serverless Services, Environments, and Functions to build a SID/URL → @ref mapping table. These resources are NOT managed by migrations (no create/update/delete) — they are read-only reference data.
+
+### New fetchers
+
+- `fetchServerlessServices(api)` — lists all services
+- For each service: fetch environments (with `domain_name`) and functions (with `path`)
+
+### State file: `state/serverless.json`
+
+```json
+{
+  "fetchedAt": "2026-02-28T...",
+  "resources": [
+    {
+      "sid": "ZS123...",
+      "uniqueName": "meu-service",
+      "friendlyName": "Meu Service",
+      "environments": [
+        {
+          "sid": "ZE456...",
+          "uniqueName": "production",
+          "domainName": "meu-service-1234.twil.io"
+        }
+      ],
+      "functions": [
+        {
+          "sid": "ZH789...",
+          "friendlyName": "minha-funcao",
+          "path": "/minha-funcao"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Serverless is fetched during pull but NOT added to `RESOURCE_TYPES` (not managed by migrations).
+
+---
+
+## Feature 7: Auto-Replace SIDs/URLs by @ref on Pull
+
+**New files**: `src/sid/auto-ref.js`
+**Files**: `src/commands/pull.js`, `src/migration/resolver.js`
+
+### @ref Format Table
+
+| Type | @ref Pattern | Resolves to |
+|------|-------------|-------------|
+| Task Queue | `@ref:taskQueues:Name` | WQ SID |
+| Workflow | `@ref:workflows:Name` | WW SID |
+| Task Channel | `@ref:taskChannels:Name` | TC SID |
+| Studio Flow | `@ref:studioFlows:Name` | FW SID |
+| Content Template | `@ref:contentTemplates:Name` | HX SID |
+| Serverless Service | `@ref:serverless:ServiceName` | ZS SID |
+| Serverless Env | `@ref:serverlessEnv:ServiceName:EnvName` | ZE SID |
+| Serverless Fn | `@ref:serverlessFn:ServiceName:FnName` | ZH SID |
+| Serverless URL | `@ref:serverlessUrl:ServiceName:EnvName:/path` | `https://domain.twil.io/path` |
+
+### Pull flow (updated)
+
+1. Fetch cloud resources (existing)
+2. Fetch serverless resources (new)
+3. Build SID → @ref mapping from ALL fetched resources
+4. Build URL → @ref mapping from serverless environments + function paths
+5. Deep replace all SIDs and URLs in cloud data with @ref patterns
+6. Generate migration from replaced data (migration has @ref, not hardcoded SIDs)
+7. Save state files **without** replace (original SIDs) for push-time resolution
+
+### Resolver expansion
+
+`src/migration/resolver.js` needs to resolve the new @ref patterns:
+- `@ref:serverless:Name` → lookup in `state.serverless.resources` by uniqueName
+- `@ref:serverlessEnv:ServiceName:EnvName` → lookup environment within service
+- `@ref:serverlessFn:ServiceName:FnName` → lookup function within service
+- `@ref:serverlessUrl:ServiceName:EnvName:/path` → build URL from environment's domainName + path
+
+---
+
 ## Implementation Order
 
 1. **F3**: Delay (executor.js only, minimal change)
@@ -248,5 +334,8 @@ Generated automatically by existing `generateRollbackAll` logic, using target da
 3. **F5**: Partial Rollback (revert command + tracker extensions)
 4. **F1**: Widget Granular (compare + generator + executor + writers + rollback + validator)
 5. **F2**: Diff-env (new command + index.js registration)
+6. **F6**: Serverless Fetch (fetchers + state)
+7. **F7**: Auto-Replace SIDs by @ref (auto-ref + pull + resolver)
 
 F1 and F2 can be developed in parallel after F3-F5 are complete.
+F6 must be done before F7.

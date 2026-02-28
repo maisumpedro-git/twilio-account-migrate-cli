@@ -2,9 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add 5 features to tam CLI: API delay, partially applied migrations, partial rollback, Studio Flow widget granular updates, and cross-environment diff command.
+**Goal:** Add 7 features to tam CLI: API delay, partially applied migrations, partial rollback, Studio Flow widget granular updates, cross-environment diff command, serverless resource fetch, and auto-replace SIDs by @ref.
 
-**Architecture:** Incremental implementation in dependency order. Group A (execution infrastructure: F3→F4→F5) modifies executor/tracker/commands. Group B (new capabilities: F1+F2) adds widget-level diffing and a new CLI command. All features use TDD with Jest ESM mocking patterns already established in the codebase.
+**Architecture:** Incremental implementation in dependency order. Group A (execution infrastructure: F3→F4→F5) modifies executor/tracker/commands. Group B (new capabilities: F1+F2) adds widget-level diffing and a new CLI command. Group C (SID portability: F6→F7) adds serverless fetch and automatic SID→@ref replacement. All features use TDD with Jest ESM mocking patterns already established in the codebase.
 
 **Tech Stack:** Node.js, ES Modules, Jest, Commander.js, fs-extra, chalk
 
@@ -2030,6 +2030,708 @@ git commit -m "docs: update CLAUDE.md for v4.0.0 features"
 
 ---
 
+## Task 12: Serverless Resource Fetcher (Feature 6)
+
+**Files:**
+- Modify: `src/twilio/fetchers.js`
+- Modify: `__tests__/twilio/fetchers.test.js`
+- Modify: `src/commands/pull.js`
+- Modify: `src/state/writer.js`
+
+**Step 1: Write failing tests for serverless fetcher**
+
+Add to `__tests__/twilio/fetchers.test.js`:
+
+```js
+describe('fetchServerlessServices', () => {
+  test('fetches services with environments and functions', async () => {
+    const mockApi = {
+      serverless: {
+        v1: {
+          services: {
+            list: jest.fn().mockResolvedValue([
+              { sid: 'ZS111', uniqueName: 'my-service', friendlyName: 'My Service' },
+            ]),
+          },
+        },
+      },
+    };
+    // Mock nested calls
+    mockApi.serverless.v1.services.mockImplementation = undefined;
+    const mockServiceContext = {
+      environments: {
+        list: jest.fn().mockResolvedValue([
+          {
+            sid: 'ZE222',
+            uniqueName: 'production',
+            domainName: 'my-service-1234.twil.io',
+          },
+        ]),
+      },
+      functions: {
+        list: jest.fn().mockResolvedValue([
+          {
+            sid: 'ZH333',
+            friendlyName: 'my-function',
+            path: '/my-function',
+          },
+        ]),
+      },
+    };
+    mockApi.serverless.v1.services = jest.fn().mockReturnValue(mockServiceContext);
+    mockApi.serverless.v1.services.list = jest.fn().mockResolvedValue([
+      { sid: 'ZS111', uniqueName: 'my-service', friendlyName: 'My Service' },
+    ]);
+
+    const result = await fetchServerlessServices(mockApi);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({
+      sid: 'ZS111',
+      uniqueName: 'my-service',
+      friendlyName: 'My Service',
+      environments: [
+        { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
+      ],
+      functions: [
+        { sid: 'ZH333', friendlyName: 'my-function', path: '/my-function' },
+      ],
+    });
+  });
+
+  test('returns empty array when serverless API fails', async () => {
+    const mockApi = {
+      serverless: {
+        v1: {
+          services: {
+            list: jest.fn().mockRejectedValue(new Error('Not found')),
+          },
+        },
+      },
+    };
+    const result = await fetchServerlessServices(mockApi);
+    expect(result).toEqual([]);
+  });
+});
+```
+
+**Step 2: Run tests to verify they fail**
+
+Run: `npm test -- --testPathPattern=fetchers.test`
+Expected: FAIL — `fetchServerlessServices` not defined
+
+**Step 3: Implement fetchServerlessServices in fetchers.js**
+
+Add to `src/twilio/fetchers.js`:
+
+```js
+async function fetchServerlessServices(api) {
+  try {
+    const services = await api.serverless.v1.services.list({ limit: 100 });
+    const result = [];
+    for (const svc of services) {
+      const [environments, functions] = await Promise.all([
+        api.serverless.v1
+          .services(svc.sid)
+          .environments.list({ limit: 100 }),
+        api.serverless.v1
+          .services(svc.sid)
+          .functions.list({ limit: 100 }),
+      ]);
+      result.push({
+        sid: svc.sid,
+        uniqueName: svc.uniqueName || svc.unique_name,
+        friendlyName: svc.friendlyName || svc.friendly_name,
+        environments: environments.map((e) => ({
+          sid: e.sid,
+          uniqueName: e.uniqueName || e.unique_name,
+          domainName: e.domainName || e.domain_name,
+        })),
+        functions: functions.map((f) => ({
+          sid: f.sid,
+          friendlyName: f.friendlyName || f.friendly_name,
+          path: f.path,
+        })),
+      });
+    }
+    return result;
+  } catch {
+    return [];
+  }
+}
+```
+
+Export it (add to existing exports or make it a named export):
+
+```js
+export { fetchServerlessServices };
+```
+
+**Step 4: Run tests to verify they pass**
+
+Run: `npm test -- --testPathPattern=fetchers.test`
+Expected: PASS
+
+**Step 5: Update pull.js to fetch and save serverless state**
+
+In `src/commands/pull.js`, add serverless fetch after cloud resource fetch:
+
+```js
+import { fetchServerlessServices } from '../twilio/fetchers.js';
+import { createClient } from '../twilio/clients.js';
+```
+
+Inside `pullCommand`, after fetching cloud data and before generating migration:
+
+```js
+  // Fetch serverless resources (read-only, for SID/URL mapping)
+  info('Baixando recursos serverless...');
+  const api = createClient(account);
+  const serverlessResources = await fetchServerlessServices(api);
+  await writeState(dir, 'serverless', serverlessResources);
+```
+
+**Step 6: Run full test suite**
+
+Run: `npm test`
+Expected: ALL PASS
+
+**Step 7: Commit**
+
+```bash
+git add src/twilio/fetchers.js __tests__/twilio/fetchers.test.js src/commands/pull.js
+git commit -m "feat: add serverless resource fetcher for SID/URL mapping"
+```
+
+---
+
+## Task 13: Auto-Replace SIDs/URLs by @ref on Pull (Feature 7)
+
+**Files:**
+- Create: `src/sid/auto-ref.js`
+- Create: `__tests__/sid/auto-ref.test.js`
+- Modify: `src/commands/pull.js`
+
+**Step 1: Write failing tests for buildRefMap**
+
+Create `__tests__/sid/auto-ref.test.js`:
+
+```js
+import { jest } from '@jest/globals';
+
+const { buildRefMap, deepReplaceWithRefs } = await import('../../src/sid/auto-ref.js');
+
+describe('buildRefMap', () => {
+  test('maps managed resource SIDs to @ref patterns', () => {
+    const allStates = {
+      taskQueues: {
+        resources: [
+          { sid: 'WQ111', friendlyName: 'Support' },
+          { sid: 'WQ222', friendlyName: 'Sales' },
+        ],
+      },
+      workflows: {
+        resources: [{ sid: 'WW333', friendlyName: 'Main Workflow' }],
+      },
+      taskChannels: {
+        resources: [{ sid: 'TC444', uniqueName: 'voice' }],
+      },
+      studioFlows: {
+        resources: [{ sid: 'FW555', friendlyName: 'Main Flow' }],
+      },
+      contentTemplates: {
+        resources: [{ sid: 'HX666', friendlyName: 'Welcome' }],
+      },
+    };
+    const serverless = [];
+
+    const map = buildRefMap(allStates, serverless);
+    expect(map['WQ111']).toBe('@ref:taskQueues:Support');
+    expect(map['WQ222']).toBe('@ref:taskQueues:Sales');
+    expect(map['WW333']).toBe('@ref:workflows:Main Workflow');
+    expect(map['TC444']).toBe('@ref:taskChannels:voice');
+    expect(map['FW555']).toBe('@ref:studioFlows:Main Flow');
+    expect(map['HX666']).toBe('@ref:contentTemplates:Welcome');
+  });
+
+  test('maps serverless SIDs to @ref patterns', () => {
+    const allStates = {};
+    const serverless = [
+      {
+        sid: 'ZS111',
+        uniqueName: 'my-service',
+        friendlyName: 'My Service',
+        environments: [
+          { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
+        ],
+        functions: [
+          { sid: 'ZH333', friendlyName: 'my-fn', path: '/my-fn' },
+        ],
+      },
+    ];
+
+    const map = buildRefMap(allStates, serverless);
+    expect(map['ZS111']).toBe('@ref:serverless:my-service');
+    expect(map['ZE222']).toBe('@ref:serverlessEnv:my-service:production');
+    expect(map['ZH333']).toBe('@ref:serverlessFn:my-service:my-fn');
+  });
+
+  test('maps serverless URLs to @ref patterns', () => {
+    const allStates = {};
+    const serverless = [
+      {
+        sid: 'ZS111',
+        uniqueName: 'my-service',
+        environments: [
+          { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
+        ],
+        functions: [
+          { sid: 'ZH333', friendlyName: 'my-fn', path: '/my-fn' },
+        ],
+      },
+    ];
+
+    const map = buildRefMap(allStates, serverless);
+    expect(map['https://my-service-1234.twil.io/my-fn']).toBe(
+      '@ref:serverlessUrl:my-service:production:/my-fn',
+    );
+  });
+
+  test('sorts replacements by key length (longest first)', () => {
+    const allStates = {};
+    const serverless = [
+      {
+        sid: 'ZS1',
+        uniqueName: 'svc',
+        environments: [
+          { sid: 'ZE1', uniqueName: 'prod', domainName: 'svc-1234.twil.io' },
+        ],
+        functions: [
+          { sid: 'ZH1', friendlyName: 'fn', path: '/fn' },
+        ],
+      },
+    ];
+
+    const map = buildRefMap(allStates, serverless);
+    const keys = Object.keys(map);
+    // URL is longer than SIDs, should appear in sorted order
+    const urlKey = 'https://svc-1234.twil.io/fn';
+    expect(keys.includes(urlKey)).toBe(true);
+  });
+});
+
+describe('deepReplaceWithRefs', () => {
+  test('replaces SIDs in nested objects', () => {
+    const refMap = { WQ111: '@ref:taskQueues:Support' };
+    const obj = {
+      configuration: {
+        task_routing: { default_filter: { queue: 'WQ111' } },
+      },
+    };
+    const result = deepReplaceWithRefs(obj, refMap);
+    expect(result.configuration.task_routing.default_filter.queue).toBe(
+      '@ref:taskQueues:Support',
+    );
+  });
+
+  test('replaces URLs embedded in strings', () => {
+    const refMap = {
+      'https://my-service-1234.twil.io/my-fn': '@ref:serverlessUrl:my-service:production:/my-fn',
+    };
+    const obj = {
+      url: 'https://my-service-1234.twil.io/my-fn',
+    };
+    const result = deepReplaceWithRefs(obj, refMap);
+    expect(result.url).toBe('@ref:serverlessUrl:my-service:production:/my-fn');
+  });
+
+  test('replaces SIDs inside arrays', () => {
+    const refMap = { FW555: '@ref:studioFlows:Main Flow' };
+    const obj = { flows: ['FW555', 'other'] };
+    const result = deepReplaceWithRefs(obj, refMap);
+    expect(result.flows[0]).toBe('@ref:studioFlows:Main Flow');
+  });
+
+  test('does not modify original object', () => {
+    const refMap = { WQ111: '@ref:taskQueues:Support' };
+    const obj = { queue: 'WQ111' };
+    deepReplaceWithRefs(obj, refMap);
+    expect(obj.queue).toBe('WQ111');
+  });
+
+  test('handles null and primitives gracefully', () => {
+    const refMap = { WQ111: '@ref:taskQueues:Support' };
+    expect(deepReplaceWithRefs(null, refMap)).toBeNull();
+    expect(deepReplaceWithRefs(42, refMap)).toBe(42);
+    expect(deepReplaceWithRefs('WQ111', refMap)).toBe('@ref:taskQueues:Support');
+  });
+});
+```
+
+**Step 2: Run tests to verify they fail**
+
+Run: `npm test -- --testPathPattern=auto-ref.test`
+Expected: FAIL — module not found
+
+**Step 3: Implement src/sid/auto-ref.js**
+
+Create `src/sid/auto-ref.js`:
+
+```js
+// src/sid/auto-ref.js
+
+const MANAGED_TYPES = [
+  { stateKey: 'taskQueues', refType: 'taskQueues', nameField: 'friendlyName' },
+  { stateKey: 'workflows', refType: 'workflows', nameField: 'friendlyName' },
+  { stateKey: 'taskChannels', refType: 'taskChannels', nameField: 'uniqueName', fallback: 'friendlyName' },
+  { stateKey: 'studioFlows', refType: 'studioFlows', nameField: 'friendlyName' },
+  { stateKey: 'contentTemplates', refType: 'contentTemplates', nameField: 'friendlyName', fallback: 'uniqueName' },
+];
+
+export function buildRefMap(allStates, serverlessResources) {
+  const map = {};
+
+  // Map managed resource SIDs
+  for (const { stateKey, refType, nameField, fallback } of MANAGED_TYPES) {
+    const resources = allStates[stateKey]?.resources || [];
+    for (const r of resources) {
+      const name = r[nameField] || (fallback && r[fallback]);
+      if (r.sid && name) {
+        map[r.sid] = `@ref:${refType}:${name}`;
+      }
+    }
+  }
+
+  // Map serverless resources
+  for (const svc of serverlessResources || []) {
+    const svcName = svc.uniqueName;
+    if (svc.sid && svcName) {
+      map[svc.sid] = `@ref:serverless:${svcName}`;
+    }
+
+    for (const env of svc.environments || []) {
+      if (env.sid && env.uniqueName) {
+        map[env.sid] = `@ref:serverlessEnv:${svcName}:${env.uniqueName}`;
+      }
+
+      // Build URL mappings for each function in each environment
+      if (env.domainName) {
+        for (const fn of svc.functions || []) {
+          if (fn.path) {
+            const url = `https://${env.domainName}${fn.path}`;
+            const fnName = fn.friendlyName || fn.path;
+            map[url] = `@ref:serverlessUrl:${svcName}:${env.uniqueName}:${fn.path}`;
+          }
+        }
+      }
+    }
+
+    for (const fn of svc.functions || []) {
+      const fnName = fn.friendlyName || fn.path;
+      if (fn.sid && fnName) {
+        map[fn.sid] = `@ref:serverlessFn:${svcName}:${fnName}`;
+      }
+    }
+  }
+
+  return map;
+}
+
+export function deepReplaceWithRefs(obj, refMap) {
+  if (obj == null) return obj;
+
+  if (typeof obj === 'string') {
+    // Sort keys by length (longest first) to avoid partial matches
+    const sortedKeys = Object.keys(refMap).sort((a, b) => b.length - a.length);
+    let result = obj;
+    for (const key of sortedKeys) {
+      result = result.replaceAll(key, refMap[key]);
+    }
+    return result;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => deepReplaceWithRefs(item, refMap));
+  }
+
+  if (typeof obj === 'object') {
+    const result = {};
+    for (const [key, val] of Object.entries(obj)) {
+      result[key] = deepReplaceWithRefs(val, refMap);
+    }
+    return result;
+  }
+
+  return obj;
+}
+```
+
+**Step 4: Run tests to verify they pass**
+
+Run: `npm test -- --testPathPattern=auto-ref.test`
+Expected: PASS
+
+**Step 5: Integrate auto-ref into pull command**
+
+Update `src/commands/pull.js` to replace SIDs/URLs with @ref before generating migration:
+
+```js
+import { buildRefMap, deepReplaceWithRefs } from '../sid/auto-ref.js';
+```
+
+Inside `pullCommand`, after fetching serverless and before `generateMigration`:
+
+```js
+  // Build SID/URL → @ref mapping from ALL fetched data
+  const refMap = buildRefMap(cloudData, serverlessResources);
+
+  // Replace SIDs/URLs with @ref in cloud data for migration generation
+  const refCloudData = {};
+  for (const type of types) {
+    refCloudData[type] = deepReplaceWithRefs(cloudData[type], refMap);
+  }
+```
+
+Then pass `refCloudData` instead of `cloudData` to `generateMigration`:
+
+```js
+  const migration = generateMigration(refCloudData, localStates, types);
+```
+
+But save **original** `cloudData` (with real SIDs) to state files — state files need real SIDs for push-time resolution:
+
+```js
+  // Update local state with cloud data (original SIDs, NOT @ref)
+  for (const type of types) {
+    const res = Array.isArray(cloudData[type])
+      ? cloudData[type]
+      : cloudData[type]
+        ? [cloudData[type]]
+        : [];
+    await writeState(dir, type, res);
+  }
+```
+
+**Step 6: Run full test suite**
+
+Run: `npm test`
+Expected: ALL PASS
+
+**Step 7: Commit**
+
+```bash
+git add src/sid/auto-ref.js __tests__/sid/auto-ref.test.js src/commands/pull.js
+git commit -m "feat: auto-replace SIDs and URLs with @ref patterns on pull"
+```
+
+---
+
+## Task 14: Expand Resolver for Serverless @ref Patterns (Feature 7, Part 2)
+
+**Files:**
+- Modify: `src/migration/resolver.js`
+- Modify: `__tests__/migration/resolver.test.js`
+
+**Step 1: Write failing tests for new @ref patterns**
+
+Add to `__tests__/migration/resolver.test.js` (create if it doesn't exist):
+
+```js
+import { jest } from '@jest/globals';
+
+const { resolveRefs } = await import('../../src/migration/resolver.js');
+
+describe('resolveRefs — serverless patterns', () => {
+  const state = {
+    taskQueues: { resources: [{ sid: 'WQ111', friendlyName: 'Support' }] },
+    serverless: {
+      resources: [
+        {
+          sid: 'ZS111',
+          uniqueName: 'my-service',
+          environments: [
+            { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
+          ],
+          functions: [
+            { sid: 'ZH333', friendlyName: 'my-fn', path: '/my-fn' },
+          ],
+        },
+      ],
+    },
+  };
+
+  test('resolves @ref:serverless:Name to service SID', () => {
+    const result = resolveRefs('@ref:serverless:my-service', state);
+    expect(result).toBe('ZS111');
+  });
+
+  test('resolves @ref:serverlessEnv:Service:Env to environment SID', () => {
+    const result = resolveRefs('@ref:serverlessEnv:my-service:production', state);
+    expect(result).toBe('ZE222');
+  });
+
+  test('resolves @ref:serverlessFn:Service:Fn to function SID', () => {
+    const result = resolveRefs('@ref:serverlessFn:my-service:my-fn', state);
+    expect(result).toBe('ZH333');
+  });
+
+  test('resolves @ref:serverlessUrl:Service:Env:/path to full URL', () => {
+    const result = resolveRefs('@ref:serverlessUrl:my-service:production:/my-fn', state);
+    expect(result).toBe('https://my-service-1234.twil.io/my-fn');
+  });
+
+  test('throws on unresolved serverless ref', () => {
+    expect(() => resolveRefs('@ref:serverless:nonexistent', state)).toThrow(
+      'Referencia nao resolvida',
+    );
+  });
+
+  test('resolves nested objects with mixed ref types', () => {
+    const obj = {
+      queue: '@ref:taskQueues:Support',
+      webhook: '@ref:serverlessUrl:my-service:production:/my-fn',
+      service: '@ref:serverless:my-service',
+    };
+    const result = resolveRefs(obj, state);
+    expect(result.queue).toBe('WQ111');
+    expect(result.webhook).toBe('https://my-service-1234.twil.io/my-fn');
+    expect(result.service).toBe('ZS111');
+  });
+});
+```
+
+**Step 2: Run tests to verify they fail**
+
+Run: `npm test -- --testPathPattern=resolver.test`
+Expected: FAIL — serverless patterns not resolved
+
+**Step 3: Expand resolver.js to handle serverless @ref patterns**
+
+Replace `src/migration/resolver.js`:
+
+```js
+const REF_PATTERN = /^@ref:(\w+):(.+)$/;
+
+function lookupSid(type, name, state, runtimeSids) {
+  const runtimeKey = `${type}:${name}`;
+  if (runtimeSids?.[runtimeKey]) return runtimeSids[runtimeKey];
+
+  const resources = state[type]?.resources || [];
+  const match = resources.find((r) => r.friendlyName === name || r.uniqueName === name);
+  if (match) return match.sid;
+
+  return null;
+}
+
+function lookupServerless(refType, nameParts, state) {
+  const serverless = state.serverless?.resources || [];
+
+  if (refType === 'serverless') {
+    // @ref:serverless:ServiceName → ZS SID
+    const svc = serverless.find((s) => s.uniqueName === nameParts);
+    return svc?.sid || null;
+  }
+
+  if (refType === 'serverlessEnv') {
+    // @ref:serverlessEnv:ServiceName:EnvName → ZE SID
+    const [svcName, envName] = nameParts.split(':');
+    const svc = serverless.find((s) => s.uniqueName === svcName);
+    const env = svc?.environments?.find((e) => e.uniqueName === envName);
+    return env?.sid || null;
+  }
+
+  if (refType === 'serverlessFn') {
+    // @ref:serverlessFn:ServiceName:FnName → ZH SID
+    const [svcName, fnName] = nameParts.split(':');
+    const svc = serverless.find((s) => s.uniqueName === svcName);
+    const fn = svc?.functions?.find((f) => f.friendlyName === fnName || f.path === fnName);
+    return fn?.sid || null;
+  }
+
+  if (refType === 'serverlessUrl') {
+    // @ref:serverlessUrl:ServiceName:EnvName:/path → https://domain/path
+    const firstColon = nameParts.indexOf(':');
+    const secondColon = nameParts.indexOf(':', firstColon + 1);
+    const svcName = nameParts.slice(0, firstColon);
+    const envName = nameParts.slice(firstColon + 1, secondColon);
+    const fnPath = nameParts.slice(secondColon + 1);
+
+    const svc = serverless.find((s) => s.uniqueName === svcName);
+    const env = svc?.environments?.find((e) => e.uniqueName === envName);
+    if (env?.domainName && fnPath) {
+      return `https://${env.domainName}${fnPath}`;
+    }
+    return null;
+  }
+
+  return null;
+}
+
+const SERVERLESS_TYPES = new Set(['serverless', 'serverlessEnv', 'serverlessFn', 'serverlessUrl']);
+
+export function resolveRefs(obj, state, runtimeSids = {}) {
+  if (obj == null) return obj;
+
+  if (typeof obj === 'string') {
+    const m = obj.match(REF_PATTERN);
+    if (m) {
+      const [, type, name] = m;
+
+      if (SERVERLESS_TYPES.has(type)) {
+        const result = lookupServerless(type, name, state);
+        if (!result) {
+          throw new Error(
+            `Referencia nao resolvida: @ref:${type}:${name} — recurso nao encontrado no state`,
+          );
+        }
+        return result;
+      }
+
+      const sid = lookupSid(type, name, state, runtimeSids);
+      if (!sid) {
+        throw new Error(
+          `Referencia nao resolvida: @ref:${type}:${name} — recurso nao encontrado no state`,
+        );
+      }
+      return sid;
+    }
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => resolveRefs(item, state, runtimeSids));
+  }
+
+  if (typeof obj === 'object') {
+    const resolved = {};
+    for (const [key, val] of Object.entries(obj)) {
+      resolved[key] = resolveRefs(val, state, runtimeSids);
+    }
+    return resolved;
+  }
+
+  return obj;
+}
+```
+
+**Step 4: Run tests to verify they pass**
+
+Run: `npm test -- --testPathPattern=resolver.test`
+Expected: PASS
+
+**Step 5: Run full test suite**
+
+Run: `npm test`
+Expected: ALL PASS
+
+**Step 6: Commit**
+
+```bash
+git add src/migration/resolver.js __tests__/migration/resolver.test.js
+git commit -m "feat: expand resolver for serverless @ref patterns (service, env, fn, url)"
+```
+
+---
+
 ## Summary
 
 | Task | Feature | Files Modified | Est. Tests |
@@ -2045,3 +2747,6 @@ git commit -m "docs: update CLAUDE.md for v4.0.0 features"
 | 9 | Widget execution | writers.js, executor.js | 0 (integration) |
 | 10 | Diff-env | diff-env.js, index.js | 0 (new cmd) |
 | 11 | Docs | CLAUDE.md | 0 |
+| 12 | Serverless fetch | fetchers.js, pull.js | 2 new |
+| 13 | Auto-replace @ref | auto-ref.js, pull.js | 10 new |
+| 14 | Resolver expand | resolver.js | 6 new |
