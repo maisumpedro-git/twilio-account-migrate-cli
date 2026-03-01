@@ -203,3 +203,74 @@ describe('diffResources — Studio Flow widget-level diff', () => {
     expect(result).toHaveLength(0);
   });
 });
+
+describe('diffResources — @ref vs SID falso positivo (bug de pull duplo)', () => {
+  test('nao deve detectar diferenca quando ambos os lados tem @ref (apos normalizacao)', () => {
+    // Apos o fix no pullCommand, ambos os lados sao normalizados com @refs antes da comparacao
+    const cloud = [
+      {
+        sid: 'WW222',
+        friendlyName: 'Main Workflow',
+        taskReservationTimeout: 120,
+        configuration: {
+          task_routing: {
+            default_filter: { queue: '@ref:taskQueues:Support' },
+            filters: [
+              {
+                filter_friendly_name: 'Sales',
+                targets: [{ queue: '@ref:taskQueues:Sales' }],
+              },
+            ],
+          },
+        },
+      },
+    ];
+    const local = [
+      {
+        sid: 'WW222',
+        friendlyName: 'Main Workflow',
+        taskReservationTimeout: 120,
+        configuration: {
+          task_routing: {
+            default_filter: { queue: '@ref:taskQueues:Support' },
+            filters: [
+              {
+                filter_friendly_name: 'Sales',
+                targets: [{ queue: '@ref:taskQueues:Sales' }],
+              },
+            ],
+          },
+        },
+      },
+    ];
+
+    const result = diffResources(cloud, local);
+
+    // Ambos os lados com @refs — nenhuma diferenca
+    expect(result).toHaveLength(0);
+  });
+
+  test('nao deve detectar diferenca quando assignmentCallbackUrl tem @ref em ambos os lados', () => {
+    const cloud = [
+      {
+        sid: 'WW222',
+        friendlyName: 'Main',
+        assignmentCallbackUrl: '@ref:serverlessUrl:my-service:production:/callback',
+        configuration: { task_routing: { filters: [] } },
+      },
+    ];
+    const local = [
+      {
+        sid: 'WW222',
+        friendlyName: 'Main',
+        assignmentCallbackUrl: '@ref:serverlessUrl:my-service:production:/callback',
+        configuration: { task_routing: { filters: [] } },
+      },
+    ];
+
+    const result = diffResources(cloud, local);
+
+    // Ambos os lados com @ref — nenhuma diferenca
+    expect(result).toHaveLength(0);
+  });
+});

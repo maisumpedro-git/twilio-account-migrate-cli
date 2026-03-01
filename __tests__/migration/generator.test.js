@@ -83,6 +83,52 @@ describe('generateMigration', () => {
     expect(result.createdAt).toBeDefined();
   });
 
+  test('retorna null quando cloudData e localStates tem @ref para o mesmo recurso', () => {
+    // Apos o fix no pullCommand, ambos os lados sao normalizados com @refs antes da comparacao
+    const cloudData = {
+      taskQueues: [{ sid: 'WQ111', friendlyName: 'Support', targetWorkers: '1==1' }],
+      workflows: [
+        {
+          sid: 'WW222',
+          friendlyName: 'Main Workflow',
+          taskReservationTimeout: 120,
+          configuration: {
+            task_routing: {
+              default_filter: { queue: '@ref:taskQueues:Support' },
+            },
+          },
+        },
+      ],
+    };
+
+    const localStates = {
+      taskQueues: {
+        fetchedAt: '2026-01-01T00:00:00.000Z',
+        resources: [{ sid: 'WQ111', friendlyName: 'Support', targetWorkers: '1==1' }],
+      },
+      workflows: {
+        fetchedAt: '2026-01-01T00:00:00.000Z',
+        resources: [
+          {
+            sid: 'WW222',
+            friendlyName: 'Main Workflow',
+            taskReservationTimeout: 120,
+            configuration: {
+              task_routing: {
+                default_filter: { queue: '@ref:taskQueues:Support' },
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const result = generateMigration(cloudData, localStates, ['taskQueues', 'workflows']);
+
+    // Ambos os lados com @refs — nenhuma diferenca, retorna null
+    expect(result).toBeNull();
+  });
+
   test('sorts operations: create queues before workflows, delete queues after workflows, studioFlows last', () => {
     const cloudData = {
       taskQueues: [{ sid: 'WQ1', friendlyName: 'New Queue', targetWorkers: '1==1' }],
