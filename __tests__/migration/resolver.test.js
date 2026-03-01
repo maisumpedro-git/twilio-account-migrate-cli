@@ -123,3 +123,165 @@ describe('resolveRefs — serverless patterns', () => {
     expect(result.config.nested.serviceSid).toBe('ZS111');
   });
 });
+
+describe('resolveRefs — workflow configuration filters', () => {
+  test('resolves @ref:taskQueues in workflow create operation configuration filter', () => {
+    const state = {
+      taskQueues: {
+        resources: [
+          { sid: 'WQ_SUPPORT', friendlyName: 'Support' },
+          { sid: 'WQ_SALES', friendlyName: 'Sales' },
+        ],
+      },
+    };
+
+    const operation = {
+      action: 'create',
+      type: 'workflows',
+      data: {
+        friendlyName: 'Main Workflow',
+        configuration: {
+          task_routing: {
+            filters: [
+              {
+                filter_friendly_name: 'Support Filter',
+                expression: 'type == "support"',
+                targets: [
+                  {
+                    queue: '@ref:taskQueues:Support',
+                    priority: 1,
+                  },
+                ],
+              },
+              {
+                filter_friendly_name: 'Sales Filter',
+                expression: 'type == "sales"',
+                targets: [
+                  {
+                    queue: '@ref:taskQueues:Sales',
+                    priority: 1,
+                  },
+                ],
+              },
+            ],
+            default_filter: {
+              queue: '@ref:taskQueues:Support',
+            },
+          },
+        },
+      },
+    };
+
+    const resolved = resolveRefs(operation, state);
+
+    // Filters targets should have resolved SIDs
+    expect(resolved.data.configuration.task_routing.filters[0].targets[0].queue).toBe(
+      'WQ_SUPPORT',
+    );
+    expect(resolved.data.configuration.task_routing.filters[1].targets[0].queue).toBe('WQ_SALES');
+    // Default filter should also be resolved
+    expect(resolved.data.configuration.task_routing.default_filter.queue).toBe('WQ_SUPPORT');
+    // Non-ref fields should be unchanged
+    expect(resolved.data.friendlyName).toBe('Main Workflow');
+    expect(resolved.data.configuration.task_routing.filters[0].expression).toBe(
+      'type == "support"',
+    );
+  });
+
+  test('resolves @ref:taskQueues in workflow update operation configuration filter', () => {
+    const state = {
+      taskQueues: {
+        resources: [{ sid: 'WQ_SUPPORT', friendlyName: 'Support' }],
+      },
+    };
+
+    const operation = {
+      action: 'update',
+      type: 'workflows',
+      match: { friendlyName: 'Main Workflow' },
+      data: {
+        configuration: {
+          task_routing: {
+            default_filter: {
+              queue: '@ref:taskQueues:Support',
+            },
+          },
+        },
+      },
+    };
+
+    const resolved = resolveRefs(operation, state);
+
+    expect(resolved.data.configuration.task_routing.default_filter.queue).toBe('WQ_SUPPORT');
+    expect(resolved.match.friendlyName).toBe('Main Workflow');
+  });
+
+  test('resolves @ref:taskQueues from runtimeSids (queue created in same migration)', () => {
+    const state = {
+      taskQueues: { resources: [] },
+    };
+    const runtimeSids = { 'taskQueues:New Queue': 'WQ_RUNTIME_NEW' };
+
+    const operation = {
+      action: 'create',
+      type: 'workflows',
+      data: {
+        friendlyName: 'Workflow',
+        configuration: {
+          task_routing: {
+            default_filter: {
+              queue: '@ref:taskQueues:New Queue',
+            },
+          },
+        },
+      },
+    };
+
+    const resolved = resolveRefs(operation, state, runtimeSids);
+
+    expect(resolved.data.configuration.task_routing.default_filter.queue).toBe('WQ_RUNTIME_NEW');
+  });
+});
+
+describe('resolveRefs — embedded @ref in expression strings', () => {
+  const state = {
+    taskQueues: {
+      resources: [
+        { sid: 'WQ_SUPPORT', friendlyName: 'Support - Portuguese' },
+        { sid: 'WQ_SALES', friendlyName: 'Sales' },
+      ],
+    },
+  };
+
+  test('resolves @ref embedded inside a filter expression string', () => {
+    const obj = {
+      expression: 'nome == \'Teste\' AND filaSid == "@ref:taskQueues:Support - Portuguese"',
+    };
+    const result = resolveRefs(obj, state);
+    expect(result.expression).toBe('nome == \'Teste\' AND filaSid == "WQ_SUPPORT"');
+  });
+
+  test('resolves multiple embedded @ref in same expression', () => {
+    const obj = {
+      expression:
+        'q1 == "@ref:taskQueues:Support - Portuguese" OR q2 == "@ref:taskQueues:Sales"',
+    };
+    const result = resolveRefs(obj, state);
+    expect(result.expression).toBe('q1 == "WQ_SUPPORT" OR q2 == "WQ_SALES"');
+  });
+
+  test('resolves embedded @ref from runtimeSids', () => {
+    const runtimeSids = { 'taskQueues:New Queue': 'WQ_RUNTIME' };
+    const obj = {
+      expression: 'filaSid == "@ref:taskQueues:New Queue"',
+    };
+    const result = resolveRefs(obj, state, runtimeSids);
+    expect(result.expression).toBe('filaSid == "WQ_RUNTIME"');
+  });
+
+  test('still resolves standalone @ref as before', () => {
+    const obj = { queue: '@ref:taskQueues:Sales' };
+    const result = resolveRefs(obj, state);
+    expect(result.queue).toBe('WQ_SALES');
+  });
+});
