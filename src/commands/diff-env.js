@@ -28,9 +28,11 @@ export async function diffEnvCommand(options) {
   const sourceStates = await readAllStates(source);
   const targetStates = await readAllStates(target);
 
-  // Read serverless state from source (for SID/URL → @ref mapping)
+  // Read serverless state from both envs (for SID/URL → @ref mapping)
   const sourceServerless = await readState(source, 'serverless');
-  const serverlessResources = sourceServerless?.resources || [];
+  const sourceServerlessResources = sourceServerless?.resources || [];
+  const targetServerless = await readState(target, 'serverless');
+  const targetServerlessResources = targetServerless?.resources || [];
 
   // Source is the "desired" state (like cloud in pull)
   // Target is the "current" state (like local in pull)
@@ -39,16 +41,27 @@ export async function diffEnvCommand(options) {
     sourceData[type] = sourceStates[type]?.resources || [];
   }
 
-  // Build @ref map from ALL source states (not just filtered types)
+  // Build @ref maps from ALL states of each env (not just filtered types)
   // because resources like studioFlows can reference SIDs from taskQueues, workflows, etc.
-  const refMap = buildRefMap(sourceStates, serverlessResources);
+  const sourceRefMap = buildRefMap(sourceStates, sourceServerlessResources);
+  const targetRefMap = buildRefMap(targetStates, targetServerlessResources);
 
+  // Replace env-specific SIDs/URLs with @ref on BOTH sides before comparing
   const refSourceData = {};
   for (const type of types) {
-    refSourceData[type] = deepReplaceWithRefs(sourceData[type], refMap);
+    refSourceData[type] = deepReplaceWithRefs(sourceData[type], sourceRefMap);
   }
 
-  const migration = generateMigration(refSourceData, targetStates, types, 'env-diff');
+  const refTargetStates = {};
+  for (const type of types) {
+    const targetResources = targetStates[type]?.resources || [];
+    refTargetStates[type] = {
+      ...targetStates[type],
+      resources: deepReplaceWithRefs(targetResources, targetRefMap),
+    };
+  }
+
+  const migration = generateMigration(refSourceData, refTargetStates, types, 'env-diff');
 
   if (!migration) {
     success('Nenhuma diferenca detectada entre os ambientes.');

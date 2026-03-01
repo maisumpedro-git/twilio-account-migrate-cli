@@ -22,8 +22,9 @@ describe('diffEnvCommand — @ref replacement', () => {
     jest.clearAllMocks();
   });
 
-  test('replaces source SIDs with @ref before generating migration', async () => {
-    // Source has a workflow referencing a taskQueue SID from the source account
+  test('replaces source SIDs with @ref and detects real content differences', async () => {
+    // Source has a workflow with a DIFFERENT timeout (real content difference)
+    // AND references a taskQueue SID from the source account
     const sourceTaskQueues = {
       fetchedAt: '2026-02-28T00:00:00.000Z',
       resources: [{ sid: 'WQ_SOURCE_111', friendlyName: 'Support', targetWorkers: '1==1' }],
@@ -34,6 +35,7 @@ describe('diffEnvCommand — @ref replacement', () => {
         {
           sid: 'WW_SOURCE_111',
           friendlyName: 'Main',
+          taskReservationTimeout: 300,
           configuration: {
             task_routing: { default_filter: { queue: 'WQ_SOURCE_111' } },
           },
@@ -41,7 +43,7 @@ describe('diffEnvCommand — @ref replacement', () => {
       ],
     };
 
-    // Target has the workflow with a different SID (target account)
+    // Target has different timeout (real change) and different SID (env-specific)
     const targetTaskQueues = {
       fetchedAt: '2026-02-28T00:00:00.000Z',
       resources: [{ sid: 'WQ_TARGET_999', friendlyName: 'Support', targetWorkers: '1==1' }],
@@ -52,6 +54,7 @@ describe('diffEnvCommand — @ref replacement', () => {
         {
           sid: 'WW_TARGET_999',
           friendlyName: 'Main',
+          taskReservationTimeout: 120,
           configuration: {
             task_routing: { default_filter: { queue: 'WQ_TARGET_999' } },
           },
@@ -59,7 +62,6 @@ describe('diffEnvCommand — @ref replacement', () => {
       ],
     };
 
-    // readState reads files based on path
     mockPathExists.mockImplementation(async (filePath) => {
       const relevantFiles = [
         'taskQueues.json',
@@ -74,19 +76,15 @@ describe('diffEnvCommand — @ref replacement', () => {
     });
 
     mockReadJson.mockImplementation(async (filePath) => {
-      // Source files
       if (filePath.includes('source') && filePath.endsWith('taskQueues.json'))
         return sourceTaskQueues;
       if (filePath.includes('source') && filePath.endsWith('workflows.json'))
         return sourceWorkflows;
-      // Target files
       if (filePath.includes('target') && filePath.endsWith('taskQueues.json'))
         return targetTaskQueues;
       if (filePath.includes('target') && filePath.endsWith('workflows.json'))
         return targetWorkflows;
-      // Serverless
       if (filePath.endsWith('serverless.json')) return { fetchedAt: null, resources: [] };
-      // Default: empty state
       return { fetchedAt: null, resources: [] };
     });
 
@@ -99,24 +97,20 @@ describe('diffEnvCommand — @ref replacement', () => {
       resources: 'taskQueues,workflows',
     });
 
-    // The migration should have been written
+    // Migration should be generated for the timeout difference
     expect(mockWriteJson).toHaveBeenCalled();
 
     const [, migration] = mockWriteJson.mock.calls[0];
 
-    // Find the workflow update operation (if any)
     const workflowOp = migration.operations.find(
       (op) => op.type === 'workflows' && op.action === 'update',
     );
 
-    if (workflowOp) {
-      // The key assertion: configuration should contain @ref, NOT the source SID
-      const configStr = JSON.stringify(workflowOp.data);
-      expect(configStr).not.toContain('WQ_SOURCE_111');
-      expect(configStr).toContain('@ref:taskQueues:Support');
-    }
+    expect(workflowOp).toBeDefined();
+    // Should have real content change (timeout) but NOT the SID difference
+    expect(workflowOp.data.taskReservationTimeout).toBe(300);
 
-    // Also verify no source SIDs leak into ANY operation
+    // No source SIDs should leak into any operation
     for (const op of migration.operations) {
       const opStr = JSON.stringify(op);
       expect(opStr).not.toContain('WQ_SOURCE_111');
@@ -306,5 +300,166 @@ describe('diffEnvCommand — @ref replacement', () => {
       expect(configStr).not.toContain('https://my-service-1234.twil.io');
       expect(configStr).toContain('@ref:serverlessUrl:my-service:production:/handler');
     }
+  });
+
+  test('does not generate widgetOps when widgets are identical except for env-specific SIDs/URLs', async () => {
+    // Source: studioFlow with widgets referencing source-env SIDs and URLs
+    const sourceTaskQueues = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [{ sid: 'WQ_SRC_111', friendlyName: 'Support', targetWorkers: '1==1' }],
+    };
+    const sourceServerless = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'ZS_SRC',
+          uniqueName: 'my-service',
+          environments: [
+            { sid: 'ZE_SRC', uniqueName: 'production', domainName: 'my-service-src.twil.io' },
+          ],
+          functions: [{ sid: 'ZH_SRC', friendlyName: 'handler', path: '/handler' }],
+          assets: [{ sid: 'ZN_SRC', friendlyName: 'greeting', path: '/audio/greeting.mp3' }],
+        },
+      ],
+    };
+    const sourceStudioFlows = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'FW_SRC',
+          friendlyName: 'Main IVR',
+          definition: {
+            description: 'Main IVR',
+            initial_state: 'Trigger',
+            states: {
+              Trigger: { name: 'Trigger', type: 'trigger', transitions: [] },
+              enqueue: {
+                name: 'enqueue',
+                type: 'enqueue-call',
+                properties: { queue_sid: 'WQ_SRC_111' },
+                transitions: [],
+              },
+              gather: {
+                name: 'gather',
+                type: 'gather-input-on-call',
+                properties: {
+                  play_url: 'https://my-service-src.twil.io/audio/greeting.mp3',
+                },
+                transitions: [],
+              },
+              say_play: {
+                name: 'say_play',
+                type: 'say-play',
+                properties: {
+                  url: 'https://my-service-src.twil.io/handler',
+                },
+                transitions: [],
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    // Target: SAME flow logically, but with target-env SIDs and URLs
+    const targetTaskQueues = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [{ sid: 'WQ_TGT_999', friendlyName: 'Support', targetWorkers: '1==1' }],
+    };
+    const targetServerless = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'ZS_TGT',
+          uniqueName: 'my-service',
+          environments: [
+            { sid: 'ZE_TGT', uniqueName: 'production', domainName: 'my-service-tgt.twil.io' },
+          ],
+          functions: [{ sid: 'ZH_TGT', friendlyName: 'handler', path: '/handler' }],
+          assets: [{ sid: 'ZN_TGT', friendlyName: 'greeting', path: '/audio/greeting.mp3' }],
+        },
+      ],
+    };
+    const targetStudioFlows = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'FW_TGT',
+          friendlyName: 'Main IVR',
+          definition: {
+            description: 'Main IVR',
+            initial_state: 'Trigger',
+            states: {
+              Trigger: { name: 'Trigger', type: 'trigger', transitions: [] },
+              enqueue: {
+                name: 'enqueue',
+                type: 'enqueue-call',
+                properties: { queue_sid: 'WQ_TGT_999' },
+                transitions: [],
+              },
+              gather: {
+                name: 'gather',
+                type: 'gather-input-on-call',
+                properties: {
+                  play_url: 'https://my-service-tgt.twil.io/audio/greeting.mp3',
+                },
+                transitions: [],
+              },
+              say_play: {
+                name: 'say_play',
+                type: 'say-play',
+                properties: {
+                  url: 'https://my-service-tgt.twil.io/handler',
+                },
+                transitions: [],
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    mockPathExists.mockImplementation(async (filePath) => {
+      const relevantFiles = [
+        'taskQueues.json',
+        'taskChannels.json',
+        'workflows.json',
+        'workspace.json',
+        'studioFlows.json',
+        'contentTemplates.json',
+        'serverless.json',
+      ];
+      return relevantFiles.some((f) => filePath.endsWith(f));
+    });
+
+    mockReadJson.mockImplementation(async (filePath) => {
+      if (filePath.includes('source') && filePath.endsWith('taskQueues.json'))
+        return sourceTaskQueues;
+      if (filePath.includes('source') && filePath.endsWith('studioFlows.json'))
+        return sourceStudioFlows;
+      if (filePath.includes('source') && filePath.endsWith('serverless.json'))
+        return sourceServerless;
+      if (filePath.includes('target') && filePath.endsWith('taskQueues.json'))
+        return targetTaskQueues;
+      if (filePath.includes('target') && filePath.endsWith('studioFlows.json'))
+        return targetStudioFlows;
+      if (filePath.includes('target') && filePath.endsWith('serverless.json'))
+        return targetServerless;
+      return { fetchedAt: null, resources: [] };
+    });
+
+    mockEnsureDir.mockResolvedValue();
+    mockWriteJson.mockResolvedValue();
+
+    await diffEnvCommand({
+      source: './env/source',
+      target: './env/target',
+      resources: 'studioFlows',
+    });
+
+    // The flows are logically identical — only SIDs/URLs differ.
+    // After @ref replacement on BOTH sides, there should be NO differences.
+    // So writeJson should NOT be called (no migration generated).
+    expect(mockWriteJson).not.toHaveBeenCalled();
   });
 });
