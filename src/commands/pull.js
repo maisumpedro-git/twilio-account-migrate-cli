@@ -64,8 +64,17 @@ export async function pullCommand(options) {
     refCloudData[type] = deepReplaceWithRefs(cloudData[type], refMap);
   }
 
+  // Normalize local state with @refs for accurate comparison
+  const refLocalStates = {};
+  for (const type of types) {
+    const state = localStates[type];
+    refLocalStates[type] = state
+      ? { ...state, resources: deepReplaceWithRefs(state.resources || [], refMap) }
+      : state;
+  }
+
   // Generate migration
-  const migration = generateMigration(refCloudData, localStates, types);
+  const migration = generateMigration(refCloudData, refLocalStates, types);
 
   if (!migration) {
     success('Nenhuma alteracao detectada.');

@@ -83,9 +83,8 @@ describe('generateMigration', () => {
     expect(result.createdAt).toBeDefined();
   });
 
-  test('retorna null quando cloudData tem @ref e localStates tem SID para o mesmo recurso', () => {
-    // Simula o segundo pull: cloudData com @ref (via deepReplaceWithRefs),
-    // localStates com SIDs (salvo pelo primeiro pull com cloudData original)
+  test('retorna null quando cloudData e localStates tem @ref para o mesmo recurso', () => {
+    // Apos o fix no pullCommand, ambos os lados sao normalizados com @refs antes da comparacao
     const cloudData = {
       taskQueues: [{ sid: 'WQ111', friendlyName: 'Support', targetWorkers: '1==1' }],
       workflows: [
@@ -116,7 +115,7 @@ describe('generateMigration', () => {
             taskReservationTimeout: 120,
             configuration: {
               task_routing: {
-                default_filter: { queue: 'WQ111' },
+                default_filter: { queue: '@ref:taskQueues:Support' },
               },
             },
           },
@@ -126,8 +125,7 @@ describe('generateMigration', () => {
 
     const result = generateMigration(cloudData, localStates, ['taskQueues', 'workflows']);
 
-    // BUG: retorna migration com update falso nos workflows
-    // porque @ref:taskQueues:Support !== WQ111
+    // Ambos os lados com @refs — nenhuma diferenca, retorna null
     expect(result).toBeNull();
   });
 

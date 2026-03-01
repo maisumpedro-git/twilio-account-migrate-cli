@@ -205,8 +205,8 @@ describe('diffResources — Studio Flow widget-level diff', () => {
 });
 
 describe('diffResources — @ref vs SID falso positivo (bug de pull duplo)', () => {
-  test('nao deve detectar diferenca quando cloud tem @ref e local tem SID original', () => {
-    // Simula o que acontece no pullCommand: cloud data tem @ref, estado local tem SIDs raw
+  test('nao deve detectar diferenca quando ambos os lados tem @ref (apos normalizacao)', () => {
+    // Apos o fix no pullCommand, ambos os lados sao normalizados com @refs antes da comparacao
     const cloud = [
       {
         sid: 'WW222',
@@ -232,11 +232,11 @@ describe('diffResources — @ref vs SID falso positivo (bug de pull duplo)', () 
         taskReservationTimeout: 120,
         configuration: {
           task_routing: {
-            default_filter: { queue: 'WQ111' },
+            default_filter: { queue: '@ref:taskQueues:Support' },
             filters: [
               {
                 filter_friendly_name: 'Sales',
-                targets: [{ queue: 'WQ222' }],
+                targets: [{ queue: '@ref:taskQueues:Sales' }],
               },
             ],
           },
@@ -246,12 +246,11 @@ describe('diffResources — @ref vs SID falso positivo (bug de pull duplo)', () 
 
     const result = diffResources(cloud, local);
 
-    // Nao deveria ter diferenca (o recurso nao mudou na cloud)
-    // BUG: retorna update porque @ref:taskQueues:Support !== WQ111
+    // Ambos os lados com @refs — nenhuma diferenca
     expect(result).toHaveLength(0);
   });
 
-  test('nao deve detectar diferenca quando assignmentCallbackUrl tem @ref vs URL raw', () => {
+  test('nao deve detectar diferenca quando assignmentCallbackUrl tem @ref em ambos os lados', () => {
     const cloud = [
       {
         sid: 'WW222',
@@ -264,14 +263,14 @@ describe('diffResources — @ref vs SID falso positivo (bug de pull duplo)', () 
       {
         sid: 'WW222',
         friendlyName: 'Main',
-        assignmentCallbackUrl: 'https://my-service-1234.twil.io/callback',
+        assignmentCallbackUrl: '@ref:serverlessUrl:my-service:production:/callback',
         configuration: { task_routing: { filters: [] } },
       },
     ];
 
     const result = diffResources(cloud, local);
 
-    // BUG: retorna update para assignmentCallbackUrl quando nao ha mudanca real
+    // Ambos os lados com @ref — nenhuma diferenca
     expect(result).toHaveLength(0);
   });
 });
