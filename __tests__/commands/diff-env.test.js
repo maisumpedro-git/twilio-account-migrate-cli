@@ -462,4 +462,211 @@ describe('diffEnvCommand — @ref replacement', () => {
     // So writeJson should NOT be called (no migration generated).
     expect(mockWriteJson).not.toHaveBeenCalled();
   });
+
+  test('replaces assignmentCallbackUrl serverless URL with @ref (no false diff)', async () => {
+    // Source: workflow with assignmentCallbackUrl pointing to source serverless domain
+    const sourceServerless = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'ZS_SRC',
+          uniqueName: 'my-service',
+          environments: [
+            { sid: 'ZE_SRC', uniqueName: 'production', domainName: 'my-service-src.twil.io' },
+          ],
+          functions: [{ sid: 'ZH_SRC', friendlyName: 'callback', path: '/callback' }],
+        },
+      ],
+    };
+    const sourceWorkflows = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'WW_SRC',
+          friendlyName: 'Main',
+          taskReservationTimeout: 120,
+          assignmentCallbackUrl: 'https://my-service-src.twil.io/callback',
+          configuration: { task_routing: { filters: [] } },
+        },
+      ],
+    };
+
+    // Target: SAME workflow logically, but with target serverless domain
+    const targetServerless = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'ZS_TGT',
+          uniqueName: 'my-service',
+          environments: [
+            { sid: 'ZE_TGT', uniqueName: 'production', domainName: 'my-service-tgt.twil.io' },
+          ],
+          functions: [{ sid: 'ZH_TGT', friendlyName: 'callback', path: '/callback' }],
+        },
+      ],
+    };
+    const targetWorkflows = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'WW_TGT',
+          friendlyName: 'Main',
+          taskReservationTimeout: 120,
+          assignmentCallbackUrl: 'https://my-service-tgt.twil.io/callback',
+          configuration: { task_routing: { filters: [] } },
+        },
+      ],
+    };
+
+    mockPathExists.mockImplementation(async (filePath) => {
+      const relevantFiles = [
+        'taskQueues.json',
+        'taskChannels.json',
+        'workflows.json',
+        'workspace.json',
+        'studioFlows.json',
+        'contentTemplates.json',
+        'serverless.json',
+      ];
+      return relevantFiles.some((f) => filePath.endsWith(f));
+    });
+
+    mockReadJson.mockImplementation(async (filePath) => {
+      if (filePath.includes('source') && filePath.endsWith('workflows.json'))
+        return sourceWorkflows;
+      if (filePath.includes('source') && filePath.endsWith('serverless.json'))
+        return sourceServerless;
+      if (filePath.includes('target') && filePath.endsWith('workflows.json'))
+        return targetWorkflows;
+      if (filePath.includes('target') && filePath.endsWith('serverless.json'))
+        return targetServerless;
+      return { fetchedAt: null, resources: [] };
+    });
+
+    mockEnsureDir.mockResolvedValue();
+    mockWriteJson.mockResolvedValue();
+
+    await diffEnvCommand({
+      source: './env/source',
+      target: './env/target',
+      resources: 'workflows',
+    });
+
+    // Workflows are logically identical — assignmentCallbackUrl differs only by env domain.
+    // After @ref replacement on both sides, no diff should be detected.
+    expect(mockWriteJson).not.toHaveBeenCalled();
+  });
+
+  test('assignmentCallbackUrl with real path difference generates migration with @ref', async () => {
+    // Source: workflow with assignmentCallbackUrl pointing to /new-callback
+    const sourceServerless = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'ZS_SRC',
+          uniqueName: 'my-service',
+          environments: [
+            { sid: 'ZE_SRC', uniqueName: 'production', domainName: 'my-service-src.twil.io' },
+          ],
+          functions: [
+            { sid: 'ZH_SRC_1', friendlyName: 'old-callback', path: '/old-callback' },
+            { sid: 'ZH_SRC_2', friendlyName: 'new-callback', path: '/new-callback' },
+          ],
+        },
+      ],
+    };
+    const sourceWorkflows = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'WW_SRC',
+          friendlyName: 'Main',
+          taskReservationTimeout: 120,
+          assignmentCallbackUrl: 'https://my-service-src.twil.io/new-callback',
+          configuration: { task_routing: { filters: [] } },
+        },
+      ],
+    };
+
+    // Target: workflow with assignmentCallbackUrl pointing to /old-callback (different path = real change)
+    const targetServerless = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'ZS_TGT',
+          uniqueName: 'my-service',
+          environments: [
+            { sid: 'ZE_TGT', uniqueName: 'production', domainName: 'my-service-tgt.twil.io' },
+          ],
+          functions: [
+            { sid: 'ZH_TGT_1', friendlyName: 'old-callback', path: '/old-callback' },
+            { sid: 'ZH_TGT_2', friendlyName: 'new-callback', path: '/new-callback' },
+          ],
+        },
+      ],
+    };
+    const targetWorkflows = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'WW_TGT',
+          friendlyName: 'Main',
+          taskReservationTimeout: 120,
+          assignmentCallbackUrl: 'https://my-service-tgt.twil.io/old-callback',
+          configuration: { task_routing: { filters: [] } },
+        },
+      ],
+    };
+
+    mockPathExists.mockImplementation(async (filePath) => {
+      const relevantFiles = [
+        'taskQueues.json',
+        'taskChannels.json',
+        'workflows.json',
+        'workspace.json',
+        'studioFlows.json',
+        'contentTemplates.json',
+        'serverless.json',
+      ];
+      return relevantFiles.some((f) => filePath.endsWith(f));
+    });
+
+    mockReadJson.mockImplementation(async (filePath) => {
+      if (filePath.includes('source') && filePath.endsWith('workflows.json'))
+        return sourceWorkflows;
+      if (filePath.includes('source') && filePath.endsWith('serverless.json'))
+        return sourceServerless;
+      if (filePath.includes('target') && filePath.endsWith('workflows.json'))
+        return targetWorkflows;
+      if (filePath.includes('target') && filePath.endsWith('serverless.json'))
+        return targetServerless;
+      return { fetchedAt: null, resources: [] };
+    });
+
+    mockEnsureDir.mockResolvedValue();
+    mockWriteJson.mockResolvedValue();
+
+    await diffEnvCommand({
+      source: './env/source',
+      target: './env/target',
+      resources: 'workflows',
+    });
+
+    // Different function paths = real content difference → migration should be generated
+    expect(mockWriteJson).toHaveBeenCalled();
+
+    const [, migration] = mockWriteJson.mock.calls[0];
+    const workflowOp = migration.operations.find(
+      (op) => op.type === 'workflows' && op.action === 'update',
+    );
+
+    expect(workflowOp).toBeDefined();
+    // assignmentCallbackUrl should contain @ref, not raw URL
+    expect(workflowOp.data.assignmentCallbackUrl).toBe(
+      '@ref:serverlessUrl:my-service:production:/new-callback',
+    );
+    // No raw source URLs should leak
+    const opStr = JSON.stringify(workflowOp);
+    expect(opStr).not.toContain('https://my-service-src.twil.io');
+  });
 });

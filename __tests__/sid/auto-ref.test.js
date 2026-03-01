@@ -175,6 +175,24 @@ describe('deepReplaceWithRefs', () => {
     );
   });
 
+  test('replaces assignmentCallbackUrl with @ref', () => {
+    const refMap = {
+      'https://my-service-1234.twil.io/callback':
+        '@ref:serverlessUrl:my-service:production:/callback',
+    };
+    const obj = {
+      friendlyName: 'Main',
+      assignmentCallbackUrl: 'https://my-service-1234.twil.io/callback',
+      configuration: { task_routing: { filters: [] } },
+    };
+    const result = deepReplaceWithRefs(obj, refMap);
+    expect(result.assignmentCallbackUrl).toBe(
+      '@ref:serverlessUrl:my-service:production:/callback',
+    );
+    // Other fields unchanged
+    expect(result.friendlyName).toBe('Main');
+  });
+
   test('handles null and primitives gracefully', () => {
     const refMap = { WQ111: '@ref:taskQueues:Support' };
     expect(deepReplaceWithRefs(null, refMap)).toBeNull();
