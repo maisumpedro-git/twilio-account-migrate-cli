@@ -53,6 +53,16 @@ export function buildRefMap(allStates, serverlessResources) {
           }
         }
       }
+
+      // Build URL mappings for each asset in each environment
+      if (env.domainName) {
+        for (const asset of svc.assets || []) {
+          if (asset.path) {
+            const url = `https://${env.domainName}${asset.path}`;
+            map[url] = `@ref:serverlessUrl:${svcName}:${env.uniqueName}:${asset.path}`;
+          }
+        }
+      }
     }
 
     for (const fn of svc.functions || []) {

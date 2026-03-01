@@ -55,6 +55,7 @@ export async function revertCommand(options) {
       });
 
       await clearPartiallyApplied(dir);
+      await unmarkApplied(dir, partial.name);
       success(`Rollback completo: ${partial.name}`);
     } catch (err) {
       error(`Erro durante rollback: ${err.message}`);
@@ -104,6 +105,7 @@ export async function revertCommand(options) {
       });
 
       await clearPartiallyApplied(dir);
+      await unmarkApplied(dir, targetName);
       success(`Revertida (parcial): ${targetName}`);
     } catch (err) {
       error(`Erro durante rollback: ${err.message}`);

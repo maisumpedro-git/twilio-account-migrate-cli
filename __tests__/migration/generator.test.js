@@ -82,4 +82,79 @@ describe('generateMigration', () => {
     expect(result.source).toBe('pull');
     expect(result.createdAt).toBeDefined();
   });
+
+  test('sorts operations: create queues before workflows, delete queues after workflows, studioFlows last', () => {
+    const cloudData = {
+      taskQueues: [{ sid: 'WQ1', friendlyName: 'New Queue', targetWorkers: '1==1' }],
+      workflows: [{ sid: 'WW1', friendlyName: 'New Workflow', configuration: {} }],
+      studioFlows: [
+        {
+          sid: 'FW1',
+          friendlyName: 'New Flow',
+          definition: { description: 'test', states: {} },
+        },
+      ],
+    };
+    const localStates = {
+      taskQueues: {
+        fetchedAt: '2026-01-01',
+        resources: [{ sid: 'WQ_OLD', friendlyName: 'Old Queue', targetWorkers: '1==1' }],
+      },
+      workflows: {
+        fetchedAt: '2026-01-01',
+        resources: [{ sid: 'WW_OLD', friendlyName: 'Old Workflow', configuration: {} }],
+      },
+      studioFlows: {
+        fetchedAt: '2026-01-01',
+        resources: [
+          {
+            sid: 'FW_OLD',
+            friendlyName: 'Old Flow',
+            definition: { description: 'old', states: {} },
+          },
+        ],
+      },
+    };
+
+    const result = generateMigration(cloudData, localStates, [
+      'taskQueues',
+      'workflows',
+      'studioFlows',
+    ]);
+
+    // Should have: create New Queue, create New Workflow, delete Old Workflow, delete Old Queue, create New Flow, delete Old Flow
+    const types = result.operations.map((op) => `${op.type}:${op.action}`);
+
+    // Find indices
+    const createQueueIdx = types.findIndex((t) => t === 'taskQueues:create');
+    const workflowOps = types.reduce(
+      (acc, t, i) => (t.startsWith('workflows:') ? [...acc, i] : acc),
+      [],
+    );
+    const deleteQueueIdx = types.findIndex((t) => t === 'taskQueues:delete');
+    const studioOps = types.reduce(
+      (acc, t, i) => (t.startsWith('studioFlows:') ? [...acc, i] : acc),
+      [],
+    );
+
+    // Create queues before any workflow operation
+    if (createQueueIdx >= 0 && workflowOps.length > 0) {
+      expect(createQueueIdx).toBeLessThan(Math.min(...workflowOps));
+    }
+
+    // All workflow ops before delete queues
+    if (workflowOps.length > 0 && deleteQueueIdx >= 0) {
+      expect(Math.max(...workflowOps)).toBeLessThan(deleteQueueIdx);
+    }
+
+    // Delete queues before any studioFlow operation
+    if (deleteQueueIdx >= 0 && studioOps.length > 0) {
+      expect(deleteQueueIdx).toBeLessThan(Math.min(...studioOps));
+    }
+
+    // Create queues before studioFlows
+    if (createQueueIdx >= 0 && studioOps.length > 0) {
+      expect(createQueueIdx).toBeLessThan(Math.min(...studioOps));
+    }
+  });
 });

@@ -72,6 +72,28 @@ describe('buildRefMap', () => {
     );
   });
 
+  test('maps serverless asset URLs to @ref patterns', () => {
+    const allStates = {};
+    const serverless = [
+      {
+        sid: 'ZS111',
+        uniqueName: 'my-service',
+        environments: [
+          { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
+        ],
+        functions: [],
+        assets: [
+          { sid: 'ZN333', friendlyName: 'greeting', path: '/audio/greeting.mp3' },
+        ],
+      },
+    ];
+
+    const map = buildRefMap(allStates, serverless);
+    expect(map['https://my-service-1234.twil.io/audio/greeting.mp3']).toBe(
+      '@ref:serverlessUrl:my-service:production:/audio/greeting.mp3',
+    );
+  });
+
   test('sorts replacements by key length (longest first)', () => {
     const allStates = {};
     const serverless = [
@@ -128,6 +150,29 @@ describe('deepReplaceWithRefs', () => {
     const obj = { queue: 'WQ111' };
     deepReplaceWithRefs(obj, refMap);
     expect(obj.queue).toBe('WQ111');
+  });
+
+  test('replaces asset URLs in nested objects', () => {
+    const refMap = {
+      'https://my-service-1234.twil.io/audio/greeting.mp3':
+        '@ref:serverlessUrl:my-service:production:/audio/greeting.mp3',
+    };
+    const obj = {
+      definition: {
+        states: {
+          say_play: {
+            type: 'say-play',
+            properties: {
+              url: 'https://my-service-1234.twil.io/audio/greeting.mp3',
+            },
+          },
+        },
+      },
+    };
+    const result = deepReplaceWithRefs(obj, refMap);
+    expect(result.definition.states.say_play.properties.url).toBe(
+      '@ref:serverlessUrl:my-service:production:/audio/greeting.mp3',
+    );
   });
 
   test('handles null and primitives gracefully', () => {

@@ -144,9 +144,10 @@ async function fetchServerlessServices(api) {
     const services = await api.serverless.v1.services.list({ limit: 100 });
     const result = [];
     for (const svc of services) {
-      const [environments, functions] = await Promise.all([
+      const [environments, functions, assets] = await Promise.all([
         api.serverless.v1.services(svc.sid).environments.list({ limit: 100 }),
         api.serverless.v1.services(svc.sid).functions.list({ limit: 100 }),
+        api.serverless.v1.services(svc.sid).assets.list({ limit: 100 }),
       ]);
       result.push({
         sid: svc.sid,
@@ -161,6 +162,11 @@ async function fetchServerlessServices(api) {
           sid: f.sid,
           friendlyName: f.friendlyName || f.friendly_name,
           path: f.path,
+        })),
+        assets: assets.map((a) => ({
+          sid: a.sid,
+          friendlyName: a.friendlyName || a.friendly_name,
+          path: a.path,
         })),
       });
     }

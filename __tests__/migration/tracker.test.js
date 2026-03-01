@@ -248,3 +248,42 @@ describe('listMigrations with partiallyApplied', () => {
     });
   });
 });
+
+describe('markApplied clears partiallyApplied', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test('clears partiallyApplied when name matches', async () => {
+    readMigrationsTracker.mockResolvedValue({
+      applied: [],
+      partiallyApplied: {
+        name: 'mig.json',
+        startedAt: '2026-01-01T00:00:00.000Z',
+        lastOperationIndex: 10,
+        totalOperations: 10,
+      },
+    });
+    await markApplied('/env/dev', 'mig.json');
+    const written = writeMigrationsTracker.mock.calls[0][1];
+    expect(written.applied).toHaveLength(1);
+    expect(written.applied[0].name).toBe('mig.json');
+    expect(written).not.toHaveProperty('partiallyApplied');
+  });
+
+  test('does not clear partiallyApplied when name differs', async () => {
+    readMigrationsTracker.mockResolvedValue({
+      applied: [],
+      partiallyApplied: {
+        name: 'other.json',
+        startedAt: '2026-01-01T00:00:00.000Z',
+        lastOperationIndex: 5,
+        totalOperations: 10,
+      },
+    });
+    await markApplied('/env/dev', 'mig.json');
+    const written = writeMigrationsTracker.mock.calls[0][1];
+    expect(written.applied).toHaveLength(1);
+    expect(written.applied[0].name).toBe('mig.json');
+    expect(written.partiallyApplied).toBeDefined();
+    expect(written.partiallyApplied.name).toBe('other.json');
+  });
+});

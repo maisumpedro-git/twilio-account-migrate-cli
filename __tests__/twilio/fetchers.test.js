@@ -320,6 +320,15 @@ describe('fetchServerlessServices', () => {
           },
         ]),
       },
+      assets: {
+        list: jest.fn().mockResolvedValue([
+          {
+            sid: 'ZN444',
+            friendlyName: 'greeting',
+            path: '/audio/greeting.mp3',
+          },
+        ]),
+      },
     };
     mockApi.serverless.v1.services = jest.fn().mockReturnValue(mockServiceContext);
     mockApi.serverless.v1.services.list = jest.fn().mockResolvedValue([
@@ -336,6 +345,7 @@ describe('fetchServerlessServices', () => {
         { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
       ],
       functions: [{ sid: 'ZH333', friendlyName: 'my-function', path: '/my-function' }],
+      assets: [{ sid: 'ZN444', friendlyName: 'greeting', path: '/audio/greeting.mp3' }],
     });
   });
 

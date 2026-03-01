@@ -23,6 +23,9 @@ export async function getPendingMigrations(dir) {
 export async function markApplied(dir, migrationName) {
   const tracker = await readMigrationsTracker(dir);
   tracker.applied.push({ name: migrationName, appliedAt: new Date().toISOString() });
+  if (tracker.partiallyApplied?.name === migrationName) {
+    delete tracker.partiallyApplied;
+  }
   await writeMigrationsTracker(dir, tracker);
 }
 
