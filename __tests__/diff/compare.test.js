@@ -203,3 +203,75 @@ describe('diffResources — Studio Flow widget-level diff', () => {
     expect(result).toHaveLength(0);
   });
 });
+
+describe('diffResources — @ref vs SID falso positivo (bug de pull duplo)', () => {
+  test('nao deve detectar diferenca quando cloud tem @ref e local tem SID original', () => {
+    // Simula o que acontece no pullCommand: cloud data tem @ref, estado local tem SIDs raw
+    const cloud = [
+      {
+        sid: 'WW222',
+        friendlyName: 'Main Workflow',
+        taskReservationTimeout: 120,
+        configuration: {
+          task_routing: {
+            default_filter: { queue: '@ref:taskQueues:Support' },
+            filters: [
+              {
+                filter_friendly_name: 'Sales',
+                targets: [{ queue: '@ref:taskQueues:Sales' }],
+              },
+            ],
+          },
+        },
+      },
+    ];
+    const local = [
+      {
+        sid: 'WW222',
+        friendlyName: 'Main Workflow',
+        taskReservationTimeout: 120,
+        configuration: {
+          task_routing: {
+            default_filter: { queue: 'WQ111' },
+            filters: [
+              {
+                filter_friendly_name: 'Sales',
+                targets: [{ queue: 'WQ222' }],
+              },
+            ],
+          },
+        },
+      },
+    ];
+
+    const result = diffResources(cloud, local);
+
+    // Nao deveria ter diferenca (o recurso nao mudou na cloud)
+    // BUG: retorna update porque @ref:taskQueues:Support !== WQ111
+    expect(result).toHaveLength(0);
+  });
+
+  test('nao deve detectar diferenca quando assignmentCallbackUrl tem @ref vs URL raw', () => {
+    const cloud = [
+      {
+        sid: 'WW222',
+        friendlyName: 'Main',
+        assignmentCallbackUrl: '@ref:serverlessUrl:my-service:production:/callback',
+        configuration: { task_routing: { filters: [] } },
+      },
+    ];
+    const local = [
+      {
+        sid: 'WW222',
+        friendlyName: 'Main',
+        assignmentCallbackUrl: 'https://my-service-1234.twil.io/callback',
+        configuration: { task_routing: { filters: [] } },
+      },
+    ];
+
+    const result = diffResources(cloud, local);
+
+    // BUG: retorna update para assignmentCallbackUrl quando nao ha mudanca real
+    expect(result).toHaveLength(0);
+  });
+});

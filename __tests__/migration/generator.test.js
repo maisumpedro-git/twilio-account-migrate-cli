@@ -83,6 +83,54 @@ describe('generateMigration', () => {
     expect(result.createdAt).toBeDefined();
   });
 
+  test('retorna null quando cloudData tem @ref e localStates tem SID para o mesmo recurso', () => {
+    // Simula o segundo pull: cloudData com @ref (via deepReplaceWithRefs),
+    // localStates com SIDs (salvo pelo primeiro pull com cloudData original)
+    const cloudData = {
+      taskQueues: [{ sid: 'WQ111', friendlyName: 'Support', targetWorkers: '1==1' }],
+      workflows: [
+        {
+          sid: 'WW222',
+          friendlyName: 'Main Workflow',
+          taskReservationTimeout: 120,
+          configuration: {
+            task_routing: {
+              default_filter: { queue: '@ref:taskQueues:Support' },
+            },
+          },
+        },
+      ],
+    };
+
+    const localStates = {
+      taskQueues: {
+        fetchedAt: '2026-01-01T00:00:00.000Z',
+        resources: [{ sid: 'WQ111', friendlyName: 'Support', targetWorkers: '1==1' }],
+      },
+      workflows: {
+        fetchedAt: '2026-01-01T00:00:00.000Z',
+        resources: [
+          {
+            sid: 'WW222',
+            friendlyName: 'Main Workflow',
+            taskReservationTimeout: 120,
+            configuration: {
+              task_routing: {
+                default_filter: { queue: 'WQ111' },
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const result = generateMigration(cloudData, localStates, ['taskQueues', 'workflows']);
+
+    // BUG: retorna migration com update falso nos workflows
+    // porque @ref:taskQueues:Support !== WQ111
+    expect(result).toBeNull();
+  });
+
   test('sorts operations: create queues before workflows, delete queues after workflows, studioFlows last', () => {
     const cloudData = {
       taskQueues: [{ sid: 'WQ1', friendlyName: 'New Queue', targetWorkers: '1==1' }],
