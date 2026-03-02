@@ -34,7 +34,7 @@ export async function executeMigration(
       runtimeSids[`${operation.type}:${name}`] = result.sid;
     }
 
-    if (onProgress) onProgress(i, migration.operations.length);
+    if (onProgress) await onProgress(i, migration.operations.length);
 
     // Wait 1s between API operations (not after last)
     if (i < migration.operations.length - 1) {

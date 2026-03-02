@@ -178,6 +178,29 @@ describe('executeMigration', () => {
     expect(onProgress).not.toHaveBeenCalled();
   });
 
+  test('awaits async onProgress before returning (prevents race condition with file writes)', async () => {
+    executeOperation.mockResolvedValueOnce({ sid: 'WQ1', friendlyName: 'Q1' });
+
+    let lastProgressCompleted = false;
+    const onProgress = jest.fn(async () => {
+      // Simulate async file write (like markPartiallyApplied)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      lastProgressCompleted = true;
+    });
+
+    // Single operation — no inter-operation sleep to mask the race condition
+    const migration = {
+      operations: [{ action: 'create', type: 'taskQueues', data: { friendlyName: 'Q1' } }],
+    };
+
+    await executeMigration(mockApi, migration, state, 'WS1', { onProgress });
+
+    // If onProgress is not awaited, lastProgressCompleted will still be false here
+    // because the async callback hasn't finished yet when executeMigration returns
+    expect(lastProgressCompleted).toBe(true);
+    expect(onProgress).toHaveBeenCalledTimes(1);
+  });
+
   test('no delay in dry-run mode', async () => {
     const delays = [];
     jest.spyOn(globalThis, 'setTimeout').mockImplementation((fn, ms) => {
