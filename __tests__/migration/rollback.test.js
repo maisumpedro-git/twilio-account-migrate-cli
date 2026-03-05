@@ -46,63 +46,42 @@ describe('generateRollback', () => {
     expect(rollback.match.friendlyName).toBe('Queue A');
     expect(rollback.data.targetWorkers).toBe('1==1');
   });
-});
 
-describe('generateRollback — widgetOps', () => {
-  test('generates inverse widgetOps for partial update', () => {
-    const operation = {
-      action: 'update',
-      type: 'studioFlows',
-      match: { friendlyName: 'Flow A' },
-      mode: 'partial',
-      widgetOps: [
-        { action: 'create_widget', widget: 'NewStep', data: { type: 'send-message' } },
-        { action: 'delete_widget', widget: 'OldStep' },
-        { action: 'update_widget', widget: 'Step1', data: { properties: { body: 'new' } } },
-        { action: 'rename_widget', widget: 'old_name', newName: 'new_name' },
-      ],
-    };
-    const localState = {
+  test('studioFlows update → rollback restores old definition', () => {
+    const flowState = {
       studioFlows: {
         resources: [
           {
             friendlyName: 'Flow A',
             definition: {
               states: {
-                OldStep: { type: 'gather', properties: { timeout: 5 } },
+                Trigger: { type: 'trigger' },
                 Step1: { type: 'send-message', properties: { body: 'old' } },
-                old_name: { type: 'connect-call', properties: {} },
               },
+              initial_state: 'Trigger',
             },
           },
         ],
       },
     };
-
-    const rollback = generateRollback(operation, localState);
+    const op = {
+      action: 'update',
+      type: 'studioFlows',
+      match: { friendlyName: 'Flow A' },
+      data: {
+        definition: {
+          states: {
+            Trigger: { type: 'trigger' },
+            Step1: { type: 'send-message', properties: { body: 'new' } },
+          },
+          initial_state: 'Trigger',
+        },
+      },
+    };
+    const rollback = generateRollback(op, flowState);
     expect(rollback.action).toBe('update');
-    expect(rollback.mode).toBe('partial');
-    expect(rollback.widgetOps).toHaveLength(4);
-
-    // Reversed order
-    expect(rollback.widgetOps[0]).toEqual({
-      action: 'rename_widget',
-      widget: 'new_name',
-      newName: 'old_name',
-    });
-    expect(rollback.widgetOps[1]).toEqual({
-      action: 'update_widget',
-      widget: 'Step1',
-      data: { properties: { body: 'old' } },
-    });
-    expect(rollback.widgetOps[2]).toEqual({
-      action: 'create_widget',
-      widget: 'OldStep',
-      data: { type: 'gather', properties: { timeout: 5 } },
-    });
-    expect(rollback.widgetOps[3]).toEqual({
-      action: 'delete_widget',
-      widget: 'NewStep',
-    });
+    expect(rollback.type).toBe('studioFlows');
+    expect(rollback.match.friendlyName).toBe('Flow A');
+    expect(rollback.data.definition).toEqual(flowState.studioFlows.resources[0].definition);
   });
 });
