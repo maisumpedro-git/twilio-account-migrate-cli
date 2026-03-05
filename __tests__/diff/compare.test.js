@@ -85,7 +85,7 @@ describe('diffResources', () => {
   });
 });
 
-describe('diffResources — Studio Flow widget-level diff', () => {
+describe('diffResources — Studio Flow full definition update', () => {
   const makeFlow = (name, states, extras = {}) => ({
     sid: 'FW123',
     friendlyName: name,
@@ -99,7 +99,7 @@ describe('diffResources — Studio Flow widget-level diff', () => {
     },
   });
 
-  test('detects new widget as create_widget', () => {
+  test('detects changed definition as full update with definition in data', () => {
     const cloud = [
       makeFlow('Flow A', {
         Trigger: { type: 'trigger', transitions: [] },
@@ -114,13 +114,13 @@ describe('diffResources — Studio Flow widget-level diff', () => {
     const result = diffResources(cloud, local);
     expect(result).toHaveLength(1);
     expect(result[0].action).toBe('update');
-    expect(result[0].mode).toBe('partial');
-    expect(result[0].widgetOps).toHaveLength(1);
-    expect(result[0].widgetOps[0].action).toBe('create_widget');
-    expect(result[0].widgetOps[0].widget).toBe('NewStep');
+    expect(result[0].match.friendlyName).toBe('Flow A');
+    expect(result[0].data.definition).toBeDefined();
+    expect(result[0].mode).toBeUndefined();
+    expect(result[0].widgetOps).toBeUndefined();
   });
 
-  test('detects removed widget as delete_widget', () => {
+  test('detects removed widget as full definition update', () => {
     const cloud = [
       makeFlow('Flow A', {
         Trigger: { type: 'trigger', transitions: [] },
@@ -134,13 +134,13 @@ describe('diffResources — Studio Flow widget-level diff', () => {
     ];
     const result = diffResources(cloud, local);
     expect(result).toHaveLength(1);
-    expect(result[0].mode).toBe('partial');
-    expect(result[0].widgetOps).toHaveLength(1);
-    expect(result[0].widgetOps[0].action).toBe('delete_widget');
-    expect(result[0].widgetOps[0].widget).toBe('OldStep');
+    expect(result[0].action).toBe('update');
+    expect(result[0].data.definition).toBeDefined();
+    expect(result[0].mode).toBeUndefined();
+    expect(result[0].widgetOps).toBeUndefined();
   });
 
-  test('detects changed widget as update_widget with only changed fields', () => {
+  test('detects widget property change as full definition update', () => {
     const cloud = [
       makeFlow('Flow A', {
         Trigger: { type: 'trigger', transitions: [] },
@@ -155,34 +155,20 @@ describe('diffResources — Studio Flow widget-level diff', () => {
     ];
     const result = diffResources(cloud, local);
     expect(result).toHaveLength(1);
-    expect(result[0].mode).toBe('partial');
-    expect(result[0].widgetOps[0].action).toBe('update_widget');
-    expect(result[0].widgetOps[0].widget).toBe('Step1');
-    expect(result[0].widgetOps[0].data.properties).toEqual({ body: 'new text' });
-    expect(result[0].widgetOps[0].data.type).toBeUndefined(); // unchanged
-  });
-
-  test('falls back to full update when >70% widgets changed', () => {
-    // 10 widgets, 8 changed = 80%
-    const cloudStates = {};
-    const localStates = {};
-    for (let i = 0; i < 10; i++) {
-      cloudStates[`Step${i}`] = { type: 'send-message', properties: { body: 'new' } };
-      localStates[`Step${i}`] = {
-        type: 'send-message',
-        properties: { body: i < 8 ? 'old' : 'new' },
-      };
-    }
-    const cloud = [makeFlow('Flow A', cloudStates)];
-    const local = [makeFlow('Flow A', localStates)];
-    const result = diffResources(cloud, local);
-    expect(result).toHaveLength(1);
-    expect(result[0].mode).toBeUndefined(); // full update, no mode
-    expect(result[0].widgetOps).toBeUndefined();
+    expect(result[0].action).toBe('update');
     expect(result[0].data.definition).toBeDefined();
+    expect(result[0].data.definition.states.Step1.properties.body).toBe('new text');
   });
 
-  test('falls back to full update when non-states fields change', () => {
+  test('no update when flows have no definition changes', () => {
+    const states = { Trigger: { type: 'trigger', transitions: [] } };
+    const cloud = [makeFlow('Flow A', states)];
+    const local = [makeFlow('Flow A', states)];
+    const result = diffResources(cloud, local);
+    expect(result).toHaveLength(0);
+  });
+
+  test('detects non-states field changes as full definition update', () => {
     const cloud = [
       makeFlow('Flow A', { Trigger: { type: 'trigger' } }, { initial_state: 'NewTrigger' }),
     ];
@@ -191,16 +177,7 @@ describe('diffResources — Studio Flow widget-level diff', () => {
     ];
     const result = diffResources(cloud, local);
     expect(result).toHaveLength(1);
-    expect(result[0].mode).toBeUndefined();
     expect(result[0].data.definition).toBeDefined();
-  });
-
-  test('no widgetOps when flows have no definition changes', () => {
-    const states = { Trigger: { type: 'trigger', transitions: [] } };
-    const cloud = [makeFlow('Flow A', states)];
-    const local = [makeFlow('Flow A', states)];
-    const result = diffResources(cloud, local);
-    expect(result).toHaveLength(0);
   });
 });
 

@@ -53,52 +53,6 @@ function changedFields(cloudItem, localItem) {
   return changed;
 }
 
-function diffFlowWidgets(cloudDef, localDef) {
-  const cloudStates = cloudDef?.states || {};
-  const localStates = localDef?.states || {};
-
-  // Check if non-states fields differ
-  const cloudNonStates = { ...cloudDef };
-  const localNonStates = { ...localDef };
-  delete cloudNonStates.states;
-  delete localNonStates.states;
-  if (!deepEqual(stripMetadata(cloudNonStates), stripMetadata(localNonStates))) {
-    return null; // fall back to full update
-  }
-
-  const widgetOps = [];
-  const cloudNames = new Set(Object.keys(cloudStates));
-  const localNames = new Set(Object.keys(localStates));
-  const allNames = new Set([...cloudNames, ...localNames]);
-
-  for (const name of allNames) {
-    const inCloud = cloudNames.has(name);
-    const inLocal = localNames.has(name);
-
-    if (inCloud && !inLocal) {
-      widgetOps.push({ action: 'create_widget', widget: name, data: cloudStates[name] });
-    } else if (!inCloud && inLocal) {
-      widgetOps.push({ action: 'delete_widget', widget: name });
-    } else {
-      const changed = changedFields(cloudStates[name], localStates[name]);
-      if (Object.keys(changed).length > 0) {
-        widgetOps.push({ action: 'update_widget', widget: name, data: changed });
-      }
-    }
-  }
-
-  if (widgetOps.length === 0) return [];
-
-  // Heuristic: if >70% of widgets changed, fall back to full update
-  const totalWidgets = allNames.size;
-  const changedCount = widgetOps.length;
-  if (totalWidgets > 0 && changedCount / totalWidgets > 0.7) {
-    return null; // fall back to full update
-  }
-
-  return widgetOps;
-}
-
 export function diffResources(cloudResources, localResources) {
   const operations = [];
   const cloudMap = new Map(cloudResources.map((r) => [resourceKey(r), r]));
@@ -123,23 +77,6 @@ export function diffResources(cloudResources, localResources) {
   for (const [name, cloudItem] of cloudMap) {
     const localItem = localMap.get(name);
     if (!localItem) continue;
-
-    // Studio Flow widget-level diff
-    if (cloudItem.definition && localItem.definition) {
-      const widgetOps = diffFlowWidgets(cloudItem.definition, localItem.definition);
-      if (widgetOps !== null && widgetOps.length > 0) {
-        operations.push({
-          action: 'update',
-          match: { friendlyName: name },
-          mode: 'partial',
-          widgetOps,
-        });
-        continue;
-      }
-      // widgetOps === null means fall back to full update (below)
-      // widgetOps === [] means no changes (skip)
-      if (widgetOps !== null) continue;
-    }
 
     const changed = changedFields(cloudItem, localItem);
     if (Object.keys(changed).length > 0) {
