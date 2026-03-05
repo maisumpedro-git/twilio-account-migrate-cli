@@ -199,4 +199,62 @@ describe('deepReplaceWithRefs', () => {
     expect(deepReplaceWithRefs(42, refMap)).toBe(42);
     expect(deepReplaceWithRefs('WQ111', refMap)).toBe('@ref:taskQueues:Support');
   });
+
+  test('replaces SIDs/URLs inside make-http-request widget properties and parameters', () => {
+    const refMap = {
+      'https://my-service-1234.twil.io/handler':
+        '@ref:serverlessUrl:my-service:production:/handler',
+      FW555: '@ref:studioFlows:Main Flow',
+      ZS111: '@ref:serverless:my-service',
+    };
+    const obj = {
+      definition: {
+        states: {
+          make_http_request_1: {
+            type: 'make-http-request',
+            properties: {
+              method: 'POST',
+              content_type: 'application/json;charset=utf-8',
+              url: 'https://my-service-1234.twil.io/handler',
+              body: '{}',
+              parameters: [
+                { key: 'FlowSid', value: 'FW555' },
+                { key: 'ServiceSid', value: 'ZS111' },
+              ],
+            },
+          },
+        },
+      },
+    };
+    const result = deepReplaceWithRefs(obj, refMap);
+    const widget = result.definition.states.make_http_request_1;
+    expect(widget.properties.url).toBe(
+      '@ref:serverlessUrl:my-service:production:/handler',
+    );
+    expect(widget.properties.parameters[0].value).toBe('@ref:studioFlows:Main Flow');
+    expect(widget.properties.parameters[1].value).toBe('@ref:serverless:my-service');
+  });
+
+  test('replaces SIDs embedded in stringified JSON body', () => {
+    const refMap = {
+      FW555: '@ref:studioFlows:Main Flow',
+      WQ111: '@ref:taskQueues:Support',
+    };
+    const obj = {
+      definition: {
+        states: {
+          http_req: {
+            type: 'make-http-request',
+            properties: {
+              body: '{"flowSid":"FW555","queueSid":"WQ111"}',
+            },
+          },
+        },
+      },
+    };
+    const result = deepReplaceWithRefs(obj, refMap);
+    expect(result.definition.states.http_req.properties.body).toBe(
+      '{"flowSid":"@ref:studioFlows:Main Flow","queueSid":"@ref:taskQueues:Support"}',
+    );
+  });
 });

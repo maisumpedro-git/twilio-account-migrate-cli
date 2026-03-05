@@ -20,7 +20,7 @@ function stripMetadata(obj) {
   const cleaned = {};
   for (const [key, val] of Object.entries(obj)) {
     if (METADATA_FIELDS.has(key)) continue;
-    cleaned[key] = typeof val === 'object' && val !== null ? stripMetadata(val) : val;
+    cleaned[key] = val;
   }
   return cleaned;
 }
