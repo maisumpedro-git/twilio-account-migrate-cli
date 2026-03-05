@@ -79,27 +79,15 @@ export function buildRefMap(allStates, serverlessResources) {
 export function deepReplaceWithRefs(obj, refMap) {
   if (obj == null) return obj;
 
-  if (typeof obj === 'string') {
-    // Sort keys by length (longest first) to avoid partial matches
-    const sortedKeys = Object.keys(refMap).sort((a, b) => b.length - a.length);
-    let result = obj;
-    for (const key of sortedKeys) {
-      result = result.replaceAll(key, refMap[key]);
-    }
-    return result;
-  }
+  // Sort keys by length (longest first) to avoid partial matches
+  const sortedKeys = Object.keys(refMap).sort((a, b) => b.length - a.length);
+  if (sortedKeys.length === 0) return obj;
 
-  if (Array.isArray(obj)) {
-    return obj.map((item) => deepReplaceWithRefs(item, refMap));
+  // Stringify → replace all SIDs/URLs → parse back
+  // This catches SIDs/URLs everywhere, including inside stringified JSON values
+  let json = JSON.stringify(obj);
+  for (const key of sortedKeys) {
+    json = json.replaceAll(key, refMap[key]);
   }
-
-  if (typeof obj === 'object') {
-    const result = {};
-    for (const [key, val] of Object.entries(obj)) {
-      result[key] = deepReplaceWithRefs(val, refMap);
-    }
-    return result;
-  }
-
-  return obj;
+  return JSON.parse(json);
 }

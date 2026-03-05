@@ -179,6 +179,75 @@ describe('diffResources — Studio Flow full definition update', () => {
     expect(result).toHaveLength(1);
     expect(result[0].data.definition).toBeDefined();
   });
+
+  test('preserves make-http-request widget url and parameters in update data', () => {
+    const cloud = [
+      makeFlow('Flow A', {
+        Trigger: { type: 'trigger', transitions: [] },
+        http_req: {
+          type: 'make-http-request',
+          transitions: [],
+          properties: {
+            method: 'POST',
+            url: '@ref:serverlessUrl:my-service:production:/handler',
+            content_type: 'application/json;charset=utf-8',
+            body: '{}',
+            parameters: [
+              { key: 'FlowSid', value: '@ref:studioFlows:Main Flow' },
+              { key: 'AccountSid', value: 'AC123' },
+            ],
+          },
+        },
+      }),
+    ];
+    const local = [
+      makeFlow('Flow A', {
+        Trigger: { type: 'trigger', transitions: [] },
+        http_req: {
+          type: 'make-http-request',
+          transitions: [],
+          properties: {
+            method: 'GET',
+            url: '@ref:serverlessUrl:my-service:production:/old-handler',
+            content_type: 'application/json;charset=utf-8',
+            body: '{}',
+            parameters: [],
+          },
+        },
+      }),
+    ];
+    const result = diffResources(cloud, local);
+    expect(result).toHaveLength(1);
+    expect(result[0].action).toBe('update');
+    const def = result[0].data.definition;
+    expect(def).toBeDefined();
+    const widget = def.states.http_req;
+    expect(widget.properties.url).toBe(
+      '@ref:serverlessUrl:my-service:production:/handler',
+    );
+    expect(widget.properties.method).toBe('POST');
+    expect(widget.properties.parameters).toHaveLength(2);
+    expect(widget.properties.parameters[0].value).toBe('@ref:studioFlows:Main Flow');
+  });
+
+  test('detects no change when make-http-request widgets are identical', () => {
+    const states = {
+      Trigger: { type: 'trigger', transitions: [] },
+      http_req: {
+        type: 'make-http-request',
+        transitions: [],
+        properties: {
+          method: 'POST',
+          url: '@ref:serverlessUrl:my-service:production:/handler',
+          parameters: [{ key: 'FlowSid', value: '@ref:studioFlows:Main Flow' }],
+        },
+      },
+    };
+    const cloud = [makeFlow('Flow A', states)];
+    const local = [makeFlow('Flow A', states)];
+    const result = diffResources(cloud, local);
+    expect(result).toHaveLength(0);
+  });
 });
 
 describe('diffResources — @ref vs SID falso positivo (bug de pull duplo)', () => {
