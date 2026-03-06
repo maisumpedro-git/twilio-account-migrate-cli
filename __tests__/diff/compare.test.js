@@ -222,9 +222,7 @@ describe('diffResources — Studio Flow full definition update', () => {
     const def = result[0].data.definition;
     expect(def).toBeDefined();
     const widget = def.states.http_req;
-    expect(widget.properties.url).toBe(
-      '@ref:serverlessUrl:my-service:production:/handler',
-    );
+    expect(widget.properties.url).toBe('@ref:serverlessUrl:my-service:production:/handler');
     expect(widget.properties.method).toBe('POST');
     expect(widget.properties.parameters).toHaveLength(2);
     expect(widget.properties.parameters[0].value).toBe('@ref:studioFlows:Main Flow');

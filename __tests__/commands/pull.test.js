@@ -44,7 +44,12 @@ jest.unstable_mockModule('../../src/twilio/clients.js', () => ({
 
 const CLOUD_TASK_QUEUES = [
   { sid: 'WQ111', friendlyName: 'Support', targetWorkers: '1==1', maxReservedWorkers: 10 },
-  { sid: 'WQ222', friendlyName: 'Sales', targetWorkers: 'skills HAS "sales"', maxReservedWorkers: 5 },
+  {
+    sid: 'WQ222',
+    friendlyName: 'Sales',
+    targetWorkers: 'skills HAS "sales"',
+    maxReservedWorkers: 5,
+  },
 ];
 
 const CLOUD_WORKFLOWS = [
@@ -67,9 +72,7 @@ const CLOUD_WORKFLOWS = [
   },
 ];
 
-const CLOUD_TASK_CHANNELS = [
-  { sid: 'TC444', friendlyName: 'Voice', uniqueName: 'voice' },
-];
+const CLOUD_TASK_CHANNELS = [{ sid: 'TC444', friendlyName: 'Voice', uniqueName: 'voice' }];
 
 const CLOUD_SERVERLESS = [
   {
@@ -124,9 +127,7 @@ const { pullCommand } = await import('../../src/commands/pull.js');
 const { success } = await import('../../src/utils/display.js');
 
 function findMigrationWrite(calls) {
-  return calls.find(
-    ([p]) => p.includes('migrations/') && p.includes('_pull-changes.json'),
-  );
+  return calls.find(([p]) => p.includes('migrations/') && p.includes('_pull-changes.json'));
 }
 
 function setupBasicCloudData() {

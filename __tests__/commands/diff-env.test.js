@@ -663,7 +663,7 @@ describe('diffEnvCommand — @ref replacement', () => {
     expect(workflowOp).toBeDefined();
     // assignmentCallbackUrl should contain @ref, not raw URL
     expect(workflowOp.data.assignmentCallbackUrl).toBe(
-      '@ref:serverlessUrl:my-service:production:/new-callback',
+      '@ref:serverlessUrl:my-service:production:/new-callback@@',
     );
     // No raw source URLs should leak
     const opStr = JSON.stringify(workflowOp);

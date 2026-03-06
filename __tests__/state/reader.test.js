@@ -12,7 +12,9 @@ jest.unstable_mockModule('fs-extra', () => ({
   ...mockFsExtra,
 }));
 
-const { readState, readAllStates, readMigrationsTracker } = await import('../../src/state/reader.js');
+const { readState, readAllStates, readMigrationsTracker } = await import(
+  '../../src/state/reader.js'
+);
 const { pathExists, readJson } = mockFsExtra;
 
 describe('readState', () => {

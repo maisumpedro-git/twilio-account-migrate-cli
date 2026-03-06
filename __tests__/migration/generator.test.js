@@ -203,4 +203,53 @@ describe('generateMigration', () => {
       expect(createQueueIdx).toBeLessThan(Math.min(...studioOps));
     }
   });
+
+  test('sorts contentTemplates:create before workflows:create so @ref:contentTemplates resolves', () => {
+    const cloudData = {
+      contentTemplates: [
+        { sid: 'HX1', friendlyName: 'Welcome', types: { 'twilio/text': { body: 'hi' } } },
+      ],
+      workflows: [
+        {
+          sid: 'WW1',
+          friendlyName: 'Main',
+          configuration: {
+            task_routing: {
+              default_filter: { queue: '@ref:taskQueues:Support' },
+            },
+          },
+        },
+      ],
+      studioFlows: [
+        {
+          sid: 'FW1',
+          friendlyName: 'IVR',
+          definition: {
+            states: [{ properties: { content_template_sid: '@ref:contentTemplates:Welcome' } }],
+          },
+        },
+      ],
+    };
+    const localStates = {
+      contentTemplates: { fetchedAt: null, resources: [] },
+      workflows: { fetchedAt: null, resources: [] },
+      studioFlows: { fetchedAt: null, resources: [] },
+    };
+
+    const result = generateMigration(cloudData, localStates, [
+      'contentTemplates',
+      'workflows',
+      'studioFlows',
+    ]);
+
+    const types = result.operations.map((op) => `${op.type}:${op.action}`);
+    const createTemplateIdx = types.findIndex((t) => t === 'contentTemplates:create');
+    const createWorkflowIdx = types.findIndex((t) => t === 'workflows:create');
+    const createFlowIdx = types.findIndex((t) => t === 'studioFlows:create');
+
+    // contentTemplates:create must come before workflows:create
+    expect(createTemplateIdx).toBeLessThan(createWorkflowIdx);
+    // contentTemplates:create must come before studioFlows:create
+    expect(createTemplateIdx).toBeLessThan(createFlowIdx);
+  });
 });

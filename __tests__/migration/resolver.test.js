@@ -175,9 +175,7 @@ describe('resolveRefs — workflow configuration filters', () => {
     const resolved = resolveRefs(operation, state);
 
     // Filters targets should have resolved SIDs
-    expect(resolved.data.configuration.task_routing.filters[0].targets[0].queue).toBe(
-      'WQ_SUPPORT',
-    );
+    expect(resolved.data.configuration.task_routing.filters[0].targets[0].queue).toBe('WQ_SUPPORT');
     expect(resolved.data.configuration.task_routing.filters[1].targets[0].queue).toBe('WQ_SALES');
     // Default filter should also be resolved
     expect(resolved.data.configuration.task_routing.default_filter.queue).toBe('WQ_SUPPORT');
@@ -263,8 +261,7 @@ describe('resolveRefs — embedded @ref in expression strings', () => {
 
   test('resolves multiple embedded @ref in same expression', () => {
     const obj = {
-      expression:
-        'q1 == "@ref:taskQueues:Support - Portuguese" OR q2 == "@ref:taskQueues:Sales"',
+      expression: 'q1 == "@ref:taskQueues:Support - Portuguese" OR q2 == "@ref:taskQueues:Sales"',
     };
     const result = resolveRefs(obj, state);
     expect(result.expression).toBe('q1 == "WQ_SUPPORT" OR q2 == "WQ_SALES"');
@@ -283,5 +280,87 @@ describe('resolveRefs — embedded @ref in expression strings', () => {
     const obj = { queue: '@ref:taskQueues:Sales' };
     const result = resolveRefs(obj, state);
     expect(result.queue).toBe('WQ_SALES');
+  });
+});
+
+describe('resolveRefs — contentTemplates', () => {
+  const state = {
+    contentTemplates: {
+      resources: [
+        { sid: 'HX_WELCOME', friendlyName: 'Welcome Template' },
+        { sid: 'HX_GOODBYE', friendlyName: 'Goodbye Template' },
+      ],
+    },
+    taskQueues: {
+      resources: [{ sid: 'WQ_SUPPORT', friendlyName: 'Support' }],
+    },
+  };
+
+  test('resolves @ref:contentTemplates:name to content template SID', () => {
+    const obj = { content_template_sid: '@ref:contentTemplates:Welcome Template' };
+    const result = resolveRefs(obj, state);
+    expect(result.content_template_sid).toBe('HX_WELCOME');
+  });
+
+  test('resolves contentTemplates @ref inside studioFlow definition', () => {
+    const obj = {
+      action: 'create',
+      type: 'studioFlows',
+      data: {
+        friendlyName: 'Main IVR',
+        definition: {
+          states: [
+            {
+              name: 'send_welcome',
+              properties: { content_template_sid: '@ref:contentTemplates:Welcome Template' },
+            },
+          ],
+        },
+      },
+    };
+    const result = resolveRefs(obj, state);
+    expect(result.data.definition.states[0].properties.content_template_sid).toBe('HX_WELCOME');
+  });
+
+  test('resolves contentTemplates @ref from runtimeSids', () => {
+    const runtimeSids = { 'contentTemplates:New Template': 'HX_RUNTIME' };
+    const obj = { template: '@ref:contentTemplates:New Template' };
+    const result = resolveRefs(obj, { contentTemplates: { resources: [] } }, runtimeSids);
+    expect(result.template).toBe('HX_RUNTIME');
+  });
+
+  test('throws when contentTemplate @ref cannot be resolved', () => {
+    const obj = { template: '@ref:contentTemplates:Nonexistent' };
+    expect(() => resolveRefs(obj, state)).toThrow('Nonexistent');
+  });
+});
+
+describe('resolveRefs — multiple @ref in Liquid templates', () => {
+  const state = {
+    contentTemplates: {
+      resources: [
+        { sid: 'HX_OPT1', friendlyName: '1_opcoes' },
+        { sid: 'HX_OPT2', friendlyName: '2_opcoes' },
+        { sid: 'HX_OPT3', friendlyName: '3_opcoes' },
+      ],
+    },
+  };
+
+  test('resolves multiple @ref:contentTemplates embedded in a Liquid template string', () => {
+    const obj = {
+      body: '{%- case count -%}{%- when 1 -%}@ref:contentTemplates:1_opcoes@@{%- when 2 -%}@ref:contentTemplates:2_opcoes@@{%- when 3 -%}@ref:contentTemplates:3_opcoes@@{%- endcase -%}',
+    };
+    const result = resolveRefs(obj, state);
+    expect(result.body).toBe(
+      '{%- case count -%}{%- when 1 -%}HX_OPT1{%- when 2 -%}HX_OPT2{%- when 3 -%}HX_OPT3{%- endcase -%}',
+    );
+  });
+
+  test('resolves @ref followed immediately by another @ref without separator', () => {
+    const obj = {
+      expr: '@ref:contentTemplates:1_opcoes@@@ref:contentTemplates:2_opcoes@@',
+    };
+    const result = resolveRefs(obj, state);
+    expect(result.expr).toBe('HX_OPT1HX_OPT2');
   });
 });
