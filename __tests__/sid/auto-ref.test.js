@@ -82,9 +82,7 @@ describe('buildRefMap', () => {
           { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
         ],
         functions: [],
-        assets: [
-          { sid: 'ZN333', friendlyName: 'greeting', path: '/audio/greeting.mp3' },
-        ],
+        assets: [{ sid: 'ZN333', friendlyName: 'greeting', path: '/audio/greeting.mp3' }],
       },
     ];
 
@@ -122,9 +120,7 @@ describe('deepReplaceWithRefs', () => {
       },
     };
     const result = deepReplaceWithRefs(obj, refMap);
-    expect(result.configuration.task_routing.default_filter.queue).toBe(
-      '@ref:taskQueues:Support',
-    );
+    expect(result.configuration.task_routing.default_filter.queue).toBe('@ref:taskQueues:Support');
   });
 
   test('replaces URLs embedded in strings', () => {
@@ -186,9 +182,7 @@ describe('deepReplaceWithRefs', () => {
       configuration: { task_routing: { filters: [] } },
     };
     const result = deepReplaceWithRefs(obj, refMap);
-    expect(result.assignmentCallbackUrl).toBe(
-      '@ref:serverlessUrl:my-service:production:/callback',
-    );
+    expect(result.assignmentCallbackUrl).toBe('@ref:serverlessUrl:my-service:production:/callback');
     // Other fields unchanged
     expect(result.friendlyName).toBe('Main');
   });
@@ -228,9 +222,7 @@ describe('deepReplaceWithRefs', () => {
     };
     const result = deepReplaceWithRefs(obj, refMap);
     const widget = result.definition.states.make_http_request_1;
-    expect(widget.properties.url).toBe(
-      '@ref:serverlessUrl:my-service:production:/handler',
-    );
+    expect(widget.properties.url).toBe('@ref:serverlessUrl:my-service:production:/handler');
     expect(widget.properties.parameters[0].value).toBe('@ref:studioFlows:Main Flow');
     expect(widget.properties.parameters[1].value).toBe('@ref:serverless:my-service');
   });

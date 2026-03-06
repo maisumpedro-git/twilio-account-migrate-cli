@@ -21,9 +21,7 @@ export function validateMigration(migration) {
     }
 
     if (!op.type || !VALID_TYPES.has(op.type)) {
-      throw new Error(
-        `${prefix}: "type" deve ser um tipo valido (${[...VALID_TYPES].join(', ')})`,
-      );
+      throw new Error(`${prefix}: "type" deve ser um tipo valido (${[...VALID_TYPES].join(', ')})`);
     }
 
     if (op.action === 'create') {

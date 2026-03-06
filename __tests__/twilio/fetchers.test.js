@@ -294,9 +294,11 @@ describe('fetchServerlessServices', () => {
       serverless: {
         v1: {
           services: {
-            list: jest.fn().mockResolvedValue([
-              { sid: 'ZS111', uniqueName: 'my-service', friendlyName: 'My Service' },
-            ]),
+            list: jest
+              .fn()
+              .mockResolvedValue([
+                { sid: 'ZS111', uniqueName: 'my-service', friendlyName: 'My Service' },
+              ]),
           },
         },
       },
@@ -331,9 +333,9 @@ describe('fetchServerlessServices', () => {
       },
     };
     mockApi.serverless.v1.services = jest.fn().mockReturnValue(mockServiceContext);
-    mockApi.serverless.v1.services.list = jest.fn().mockResolvedValue([
-      { sid: 'ZS111', uniqueName: 'my-service', friendlyName: 'My Service' },
-    ]);
+    mockApi.serverless.v1.services.list = jest
+      .fn()
+      .mockResolvedValue([{ sid: 'ZS111', uniqueName: 'my-service', friendlyName: 'My Service' }]);
 
     const result = await fetchServerlessServices(mockApi);
     expect(result).toHaveLength(1);

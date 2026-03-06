@@ -79,11 +79,11 @@ tam migration list --dir ./env/dev                      # Lista migrations e sta
 
 ## Recursos Suportados
 
-| Tipo       | Recurso                                                        |
-| ---------- | -------------------------------------------------------------- |
-| TaskRouter | Task Queues, Task Channels, Workflows, Workspace               |
-| Studio     | Studio Flows (com definition completa + updates parciais de widgets) |
-| Content    | Content Templates                                              |
+| Tipo       | Recurso                                                                     |
+| ---------- | --------------------------------------------------------------------------- |
+| TaskRouter | Task Queues, Task Channels, Workflows, Workspace                            |
+| Studio     | Studio Flows (com definition completa + updates parciais de widgets)        |
+| Content    | Content Templates                                                           |
 | Serverless | Services, Environments, Functions (read-only, para mapeamento de SIDs/URLs) |
 
 ## Estrutura do Ambiente
@@ -167,12 +167,12 @@ No push, `@ref:taskQueues:Support` é resolvido para o SID real a partir do stat
 
 O pull gera automaticamente referências `@ref` para recursos Serverless, resolvidas no push:
 
-| Padrão                              | Resolve Para         | Exemplo                                              |
-| ----------------------------------- | -------------------- | ---------------------------------------------------- |
-| `@ref:serverless:Nome`              | Service SID (ZS)     | `@ref:serverless:my-service`                         |
-| `@ref:serverlessEnv:Svc:Env`       | Environment SID (ZE) | `@ref:serverlessEnv:my-service:production`           |
-| `@ref:serverlessFn:Svc:Fn`         | Function SID (ZH)    | `@ref:serverlessFn:my-service:my-fn`                 |
-| `@ref:serverlessUrl:Svc:Env:/path` | URL completa         | `@ref:serverlessUrl:my-service:production:/my-fn`    |
+| Padrão                             | Resolve Para         | Exemplo                                           |
+| ---------------------------------- | -------------------- | ------------------------------------------------- |
+| `@ref:serverless:Nome`             | Service SID (ZS)     | `@ref:serverless:my-service`                      |
+| `@ref:serverlessEnv:Svc:Env`       | Environment SID (ZE) | `@ref:serverlessEnv:my-service:production`        |
+| `@ref:serverlessFn:Svc:Fn`         | Function SID (ZH)    | `@ref:serverlessFn:my-service:my-fn`              |
+| `@ref:serverlessUrl:Svc:Env:/path` | URL completa         | `@ref:serverlessUrl:my-service:production:/my-fn` |
 
 ## Updates Parciais de Widgets (Studio Flows)
 
@@ -185,8 +185,16 @@ Migrations podem usar `mode: "partial"` com `widgetOps` para alterações granul
   "match": { "friendlyName": "Main IVR" },
   "mode": "partial",
   "widgetOps": [
-    { "action": "create_widget", "widget": "new_step", "data": { "name": "new_step", "type": "send-message" } },
-    { "action": "update_widget", "widget": "greeting", "data": { "properties": { "body": "Olá!" } } },
+    {
+      "action": "create_widget",
+      "widget": "new_step",
+      "data": { "name": "new_step", "type": "send-message" }
+    },
+    {
+      "action": "update_widget",
+      "widget": "greeting",
+      "data": { "properties": { "body": "Olá!" } }
+    },
     { "action": "delete_widget", "widget": "old_step" },
     { "action": "rename_widget", "widget": "step1", "newName": "welcome_step" }
   ]
