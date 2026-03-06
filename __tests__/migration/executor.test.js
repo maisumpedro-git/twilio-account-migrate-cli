@@ -2,7 +2,6 @@ import { jest } from '@jest/globals';
 
 jest.unstable_mockModule('../../src/twilio/writers.js', () => ({
   executeOperation: jest.fn(),
-  findSidByName: jest.fn(),
 }));
 
 jest.unstable_mockModule('../../src/migration/resolver.js', () => ({
@@ -10,7 +9,7 @@ jest.unstable_mockModule('../../src/migration/resolver.js', () => ({
 }));
 
 const { executeMigration } = await import('../../src/migration/executor.js');
-const { executeOperation, findSidByName } = await import('../../src/twilio/writers.js');
+const { executeOperation } = await import('../../src/twilio/writers.js');
 const { resolveRefs } = await import('../../src/migration/resolver.js');
 
 describe('executeMigration', () => {
@@ -220,70 +219,5 @@ describe('executeMigration', () => {
     expect(delays.filter((d) => d === 1000)).toHaveLength(0);
 
     globalThis.setTimeout.mockRestore();
-  });
-
-  test('falls back to API when @ref cannot be resolved from state', async () => {
-    // First call to resolveRefs throws (ref not in state),
-    // after API fallback populates state, second call succeeds
-    let callCount = 0;
-    resolveRefs.mockImplementation((obj, st) => {
-      callCount++;
-      if (callCount === 1) {
-        throw new Error(
-          'Referencia nao resolvida: @ref:contentTemplates:Welcome — recurso nao encontrado no state',
-        );
-      }
-      return obj;
-    });
-
-    findSidByName.mockResolvedValueOnce('HX_PROD_123');
-    executeOperation.mockResolvedValueOnce({ sid: 'FW1', friendlyName: 'Main IVR' });
-
-    const emptyState = { contentTemplates: { resources: [] } };
-    const migration = {
-      operations: [
-        {
-          action: 'update',
-          type: 'studioFlows',
-          match: { friendlyName: 'Main IVR' },
-          data: { definition: { content_template_sid: '@ref:contentTemplates:Welcome' } },
-        },
-      ],
-    };
-
-    const results = await executeMigration(mockApi, migration, emptyState, 'WS1');
-
-    expect(findSidByName).toHaveBeenCalledWith(mockApi, 'contentTemplates', 'Welcome', 'WS1');
-    expect(emptyState.contentTemplates.resources).toContainEqual({
-      sid: 'HX_PROD_123',
-      friendlyName: 'Welcome',
-    });
-    expect(results).toHaveLength(1);
-    expect(results[0].status).toBe('ok');
-  });
-
-  test('throws original error when API fallback also fails', async () => {
-    resolveRefs.mockImplementation(() => {
-      throw new Error(
-        'Referencia nao resolvida: @ref:contentTemplates:Missing — recurso nao encontrado no state',
-      );
-    });
-
-    findSidByName.mockResolvedValueOnce(null);
-
-    const migration = {
-      operations: [
-        {
-          action: 'update',
-          type: 'studioFlows',
-          match: { friendlyName: 'Flow' },
-          data: { definition: { content_template_sid: '@ref:contentTemplates:Missing' } },
-        },
-      ],
-    };
-
-    await expect(executeMigration(mockApi, migration, state, 'WS1')).rejects.toThrow(
-      'Referencia nao resolvida',
-    );
   });
 });

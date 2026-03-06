@@ -1,5 +1,5 @@
-const REF_PATTERN = /^@ref:(\w+):(.+)$/;
-const EMBEDDED_REF_PATTERN = /@ref:(\w+):([^"]+)/g;
+const REF_PATTERN = /^@ref:(\w+):([^@]+?)@@?$/;
+const EMBEDDED_REF_PATTERN = /@ref:(\w+):(.+?)(?:@@|(?=@ref:)|(?=")|$)/g;
 
 const SERVERLESS_TYPES = new Set(['serverless', 'serverlessEnv', 'serverlessFn', 'serverlessUrl']);
 

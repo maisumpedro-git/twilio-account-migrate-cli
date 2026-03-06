@@ -27,7 +27,7 @@ export function buildRefMap(allStates, serverlessResources) {
     for (const r of resources) {
       const name = r[nameField] || (fallback && r[fallback]);
       if (r.sid && name) {
-        map[r.sid] = `@ref:${refType}:${name}`;
+        map[r.sid] = `@ref:${refType}:${name}@@`;
       }
     }
   }
@@ -36,12 +36,12 @@ export function buildRefMap(allStates, serverlessResources) {
   for (const svc of serverlessResources || []) {
     const svcName = svc.uniqueName;
     if (svc.sid && svcName) {
-      map[svc.sid] = `@ref:serverless:${svcName}`;
+      map[svc.sid] = `@ref:serverless:${svcName}@@`;
     }
 
     for (const env of svc.environments || []) {
       if (env.sid && env.uniqueName) {
-        map[env.sid] = `@ref:serverlessEnv:${svcName}:${env.uniqueName}`;
+        map[env.sid] = `@ref:serverlessEnv:${svcName}:${env.uniqueName}@@`;
       }
 
       // Build URL mappings for each function in each environment
@@ -49,7 +49,7 @@ export function buildRefMap(allStates, serverlessResources) {
         for (const fn of svc.functions || []) {
           if (fn.path) {
             const url = `https://${env.domainName}${fn.path}`;
-            map[url] = `@ref:serverlessUrl:${svcName}:${env.uniqueName}:${fn.path}`;
+            map[url] = `@ref:serverlessUrl:${svcName}:${env.uniqueName}:${fn.path}@@`;
           }
         }
       }
@@ -59,7 +59,7 @@ export function buildRefMap(allStates, serverlessResources) {
         for (const asset of svc.assets || []) {
           if (asset.path) {
             const url = `https://${env.domainName}${asset.path}`;
-            map[url] = `@ref:serverlessUrl:${svcName}:${env.uniqueName}:${asset.path}`;
+            map[url] = `@ref:serverlessUrl:${svcName}:${env.uniqueName}:${asset.path}@@`;
           }
         }
       }
@@ -68,7 +68,7 @@ export function buildRefMap(allStates, serverlessResources) {
     for (const fn of svc.functions || []) {
       const fnName = fn.friendlyName || fn.path;
       if (fn.sid && fnName) {
-        map[fn.sid] = `@ref:serverlessFn:${svcName}:${fnName}`;
+        map[fn.sid] = `@ref:serverlessFn:${svcName}:${fnName}@@`;
       }
     }
   }

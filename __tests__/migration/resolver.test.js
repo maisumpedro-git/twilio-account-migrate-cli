@@ -334,3 +334,33 @@ describe('resolveRefs — contentTemplates', () => {
     expect(() => resolveRefs(obj, state)).toThrow('Nonexistent');
   });
 });
+
+describe('resolveRefs — multiple @ref in Liquid templates', () => {
+  const state = {
+    contentTemplates: {
+      resources: [
+        { sid: 'HX_OPT1', friendlyName: '1_opcoes' },
+        { sid: 'HX_OPT2', friendlyName: '2_opcoes' },
+        { sid: 'HX_OPT3', friendlyName: '3_opcoes' },
+      ],
+    },
+  };
+
+  test('resolves multiple @ref:contentTemplates embedded in a Liquid template string', () => {
+    const obj = {
+      body: '{%- case count -%}{%- when 1 -%}@ref:contentTemplates:1_opcoes@@{%- when 2 -%}@ref:contentTemplates:2_opcoes@@{%- when 3 -%}@ref:contentTemplates:3_opcoes@@{%- endcase -%}',
+    };
+    const result = resolveRefs(obj, state);
+    expect(result.body).toBe(
+      '{%- case count -%}{%- when 1 -%}HX_OPT1{%- when 2 -%}HX_OPT2{%- when 3 -%}HX_OPT3{%- endcase -%}',
+    );
+  });
+
+  test('resolves @ref followed immediately by another @ref without separator', () => {
+    const obj = {
+      expr: '@ref:contentTemplates:1_opcoes@@@ref:contentTemplates:2_opcoes@@',
+    };
+    const result = resolveRefs(obj, state);
+    expect(result.expr).toBe('HX_OPT1HX_OPT2');
+  });
+});
