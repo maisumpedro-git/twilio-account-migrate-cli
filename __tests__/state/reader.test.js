@@ -12,7 +12,7 @@ jest.unstable_mockModule('fs-extra', () => ({
   ...mockFsExtra,
 }));
 
-const { readState, readMigrationsTracker } = await import('../../src/state/reader.js');
+const { readState, readAllStates, readMigrationsTracker } = await import('../../src/state/reader.js');
 const { pathExists, readJson } = mockFsExtra;
 
 describe('readState', () => {
@@ -34,6 +34,19 @@ describe('readState', () => {
     pathExists.mockResolvedValue(false);
     const result = await readState('/env/dev', 'taskQueues');
     expect(result).toEqual({ fetchedAt: null, resources: [] });
+  });
+});
+
+describe('readAllStates', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test('includes serverless in loaded resource types', async () => {
+    pathExists.mockResolvedValue(true);
+    readJson.mockResolvedValue({ fetchedAt: null, resources: [] });
+    const states = await readAllStates('/env/dev');
+    expect(states).toHaveProperty('serverless');
+    const calledPaths = readJson.mock.calls.map((c) => c[0]);
+    expect(calledPaths).toContain(path.join('/env/dev', 'state', 'serverless.json'));
   });
 });
 

@@ -20,6 +20,7 @@ export async function readAllStates(dir) {
     'workspace',
     'studioFlows',
     'contentTemplates',
+    'serverless',
   ];
   const states = {};
   for (const type of types) {
