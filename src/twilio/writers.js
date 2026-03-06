@@ -113,6 +113,8 @@ async function findSidByName(api, type, name, workspaceSid) {
   return resources[0]?.sid || null;
 }
 
+export { findSidByName };
+
 export async function executeOperation(api, operation, workspaceSid, state) {
   const { action, type, match, data } = operation;
 
