@@ -463,6 +463,130 @@ describe('diffEnvCommand — @ref replacement', () => {
     expect(mockWriteJson).not.toHaveBeenCalled();
   });
 
+  test('replaces run-function widget SIDs and URL with @ref across environments', async () => {
+    const sourceServerless = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'ZS_SRC',
+          uniqueName: 'my-service',
+          environments: [
+            { sid: 'ZE_SRC', uniqueName: 'production', domainName: 'my-service-src.twil.io' },
+          ],
+          functions: [{ sid: 'ZH_SRC', friendlyName: 'handler', path: '/handler' }],
+        },
+      ],
+    };
+    const sourceStudioFlows = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'FW_SRC',
+          friendlyName: 'Main IVR',
+          definition: {
+            description: 'Main IVR',
+            initial_state: 'Trigger',
+            states: {
+              Trigger: { name: 'Trigger', type: 'trigger', transitions: [] },
+              run_fn: {
+                name: 'run_fn',
+                type: 'run-function',
+                properties: {
+                  service_sid: 'ZS_SRC',
+                  environment_sid: 'ZE_SRC',
+                  function_sid: 'ZH_SRC',
+                  url: 'https://my-service-src.twil.io/handler',
+                  parameters: [],
+                },
+                transitions: [],
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    const targetServerless = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'ZS_TGT',
+          uniqueName: 'my-service',
+          environments: [
+            { sid: 'ZE_TGT', uniqueName: 'production', domainName: 'my-service-tgt.twil.io' },
+          ],
+          functions: [{ sid: 'ZH_TGT', friendlyName: 'handler', path: '/handler' }],
+        },
+      ],
+    };
+    const targetStudioFlows = {
+      fetchedAt: '2026-02-28T00:00:00.000Z',
+      resources: [
+        {
+          sid: 'FW_TGT',
+          friendlyName: 'Main IVR',
+          definition: {
+            description: 'Main IVR',
+            initial_state: 'Trigger',
+            states: {
+              Trigger: { name: 'Trigger', type: 'trigger', transitions: [] },
+              run_fn: {
+                name: 'run_fn',
+                type: 'run-function',
+                properties: {
+                  service_sid: 'ZS_TGT',
+                  environment_sid: 'ZE_TGT',
+                  function_sid: 'ZH_TGT',
+                  url: 'https://my-service-tgt.twil.io/handler',
+                  parameters: [],
+                },
+                transitions: [],
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    mockPathExists.mockImplementation(async (filePath) => {
+      const relevantFiles = [
+        'taskQueues.json',
+        'taskChannels.json',
+        'workflows.json',
+        'workspace.json',
+        'studioFlows.json',
+        'contentTemplates.json',
+        'serverless.json',
+      ];
+      return relevantFiles.some((f) => filePath.endsWith(f));
+    });
+
+    mockReadJson.mockImplementation(async (filePath) => {
+      if (filePath.includes('source') && filePath.endsWith('studioFlows.json'))
+        return sourceStudioFlows;
+      if (filePath.includes('source') && filePath.endsWith('serverless.json'))
+        return sourceServerless;
+      if (filePath.includes('target') && filePath.endsWith('studioFlows.json'))
+        return targetStudioFlows;
+      if (filePath.includes('target') && filePath.endsWith('serverless.json'))
+        return targetServerless;
+      return { fetchedAt: null, resources: [] };
+    });
+
+    mockEnsureDir.mockResolvedValue();
+    mockWriteJson.mockResolvedValue();
+
+    await diffEnvCommand({
+      source: './env/source',
+      target: './env/target',
+      resources: 'studioFlows',
+    });
+
+    // Flows are logically identical — only env-specific SIDs/URLs differ.
+    // After @ref replacement on BOTH sides, there should be NO differences.
+    expect(mockWriteJson).not.toHaveBeenCalled();
+  });
+
   test('replaces assignmentCallbackUrl serverless URL with @ref (no false diff)', async () => {
     // Source: workflow with assignmentCallbackUrl pointing to source serverless domain
     const sourceServerless = {

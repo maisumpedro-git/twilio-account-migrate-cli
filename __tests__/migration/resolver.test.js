@@ -364,3 +364,79 @@ describe('resolveRefs — multiple @ref in Liquid templates', () => {
     expect(result.expr).toBe('HX_OPT1HX_OPT2');
   });
 });
+
+describe('resolveRefs — run-function widget', () => {
+  const state = {
+    serverless: {
+      resources: [
+        {
+          sid: 'ZS111',
+          uniqueName: 'my-service',
+          environments: [
+            { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
+          ],
+          functions: [{ sid: 'ZH333', friendlyName: 'my-fn', path: '/my-fn' }],
+        },
+      ],
+    },
+    studioFlows: {
+      resources: [{ sid: 'FW555', friendlyName: 'Main Flow' }],
+    },
+  };
+
+  test('resolves all @ref patterns in run-function widget properties', () => {
+    const obj = {
+      action: 'update',
+      type: 'studioFlows',
+      match: { friendlyName: 'Main Flow' },
+      data: {
+        definition: {
+          states: {
+            run_function_1: {
+              type: 'run-function',
+              properties: {
+                service_sid: '@ref:serverless:my-service@@',
+                environment_sid: '@ref:serverlessEnv:my-service:production@@',
+                function_sid: '@ref:serverlessFn:my-service:my-fn@@',
+                url: '@ref:serverlessUrl:my-service:production:/my-fn@@',
+                parameters: [{ key: 'FlowSid', value: '@ref:studioFlows:Main Flow@@' }],
+              },
+            },
+          },
+        },
+      },
+    };
+    const result = resolveRefs(obj, state);
+    const widget = result.data.definition.states.run_function_1;
+    expect(widget.properties.service_sid).toBe('ZS111');
+    expect(widget.properties.environment_sid).toBe('ZE222');
+    expect(widget.properties.function_sid).toBe('ZH333');
+    expect(widget.properties.url).toBe('https://my-service-1234.twil.io/my-fn');
+    expect(widget.properties.parameters[0].value).toBe('FW555');
+  });
+
+  test('resolves @ref in run-function widget inside stringified JSON body', () => {
+    const obj = {
+      data: {
+        definition: {
+          states: {
+            run_fn: {
+              type: 'run-function',
+              properties: {
+                url: '@ref:serverlessUrl:my-service:production:/my-fn@@',
+                body: '{"flowSid":"@ref:studioFlows:Main Flow@@"}',
+              },
+            },
+          },
+        },
+      },
+    };
+    const result = resolveRefs(obj, state);
+    expect(result.data.definition.states.run_fn.properties.url).toBe(
+      'https://my-service-1234.twil.io/my-fn',
+    );
+    expect(result.data.definition.states.run_fn.properties.body).toBe(
+      '{"flowSid":"FW555"}',
+    );
+  });
+});

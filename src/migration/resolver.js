@@ -1,5 +1,4 @@
-const REF_PATTERN = /^@ref:(\w+):([^@]+?)@@?$/;
-const EMBEDDED_REF_PATTERN = /@ref:(\w+):(.+?)(?:@@|(?=@ref:)|(?=")|$)/g;
+const EMBEDDED_REF_PATTERN = /@ref:(\w+):(.+?)(?:@@|(?=@ref:)|(?=\\?")|$)/g;
 
 const SERVERLESS_TYPES = new Set(['serverless', 'serverlessEnv', 'serverlessFn', 'serverlessUrl']);
 
@@ -60,54 +59,33 @@ function lookupServerless(type, name, state, runtimeSids) {
   return null;
 }
 
+function resolveRef(type, name, state, runtimeSids) {
+  const result = SERVERLESS_TYPES.has(type)
+    ? lookupServerless(type, name, state, runtimeSids)
+    : lookupSid(type, name, state, runtimeSids);
+  if (!result) {
+    throw new Error(
+      `Referencia nao resolvida: @ref:${type}:${name} — recurso nao encontrado no state`,
+    );
+  }
+  return result;
+}
+
 export function resolveRefs(obj, state, runtimeSids = {}) {
   if (obj == null) return obj;
 
-  if (typeof obj === 'string') {
-    // Full-string @ref — entire value is a reference
-    const m = obj.match(REF_PATTERN);
-    if (m) {
-      const [, type, name] = m;
-      const result = SERVERLESS_TYPES.has(type)
-        ? lookupServerless(type, name, state, runtimeSids)
-        : lookupSid(type, name, state, runtimeSids);
-      if (!result) {
-        throw new Error(
-          `Referencia nao resolvida: @ref:${type}:${name} — recurso nao encontrado no state`,
-        );
-      }
-      return result;
-    }
+  // Stringify → find all @ref patterns via regex → resolve each → parse back
+  let json = JSON.stringify(obj);
 
-    // Embedded @ref — reference inside a larger string (e.g. filter expressions)
-    if (obj.includes('@ref:')) {
-      return obj.replace(EMBEDDED_REF_PATTERN, (_match, type, name) => {
-        const result = SERVERLESS_TYPES.has(type)
-          ? lookupServerless(type, name, state, runtimeSids)
-          : lookupSid(type, name, state, runtimeSids);
-        if (!result) {
-          throw new Error(
-            `Referencia nao resolvida: @ref:${type}:${name} — recurso nao encontrado no state`,
-          );
-        }
-        return result;
-      });
-    }
+  if (!json.includes('@ref:')) return obj;
 
-    return obj;
-  }
+  json = json.replace(EMBEDDED_REF_PATTERN, (_match, type, name) => {
+    const resolved = resolveRef(type, name, state, runtimeSids);
+    // Escape the resolved value for safe JSON embedding
+    // JSON.stringify adds quotes around strings, so we slice them off
+    const escaped = JSON.stringify(String(resolved));
+    return escaped.slice(1, -1);
+  });
 
-  if (Array.isArray(obj)) {
-    return obj.map((item) => resolveRefs(item, state, runtimeSids));
-  }
-
-  if (typeof obj === 'object') {
-    const resolved = {};
-    for (const [key, val] of Object.entries(obj)) {
-      resolved[key] = resolveRefs(val, state, runtimeSids);
-    }
-    return resolved;
-  }
-
-  return obj;
+  return JSON.parse(json);
 }
