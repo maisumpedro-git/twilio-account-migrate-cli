@@ -227,6 +227,38 @@ describe('deepReplaceWithRefs', () => {
     expect(widget.properties.parameters[1].value).toBe('@ref:serverless:my-service@@');
   });
 
+  test('replaces SIDs and URL in run-function widget properties', () => {
+    const refMap = {
+      ZS111: '@ref:serverless:my-service@@',
+      ZE222: '@ref:serverlessEnv:my-service:production@@',
+      ZH333: '@ref:serverlessFn:my-service:my-fn@@',
+      'https://my-service-1234.twil.io/my-fn':
+        '@ref:serverlessUrl:my-service:production:/my-fn@@',
+    };
+    const obj = {
+      definition: {
+        states: {
+          run_function_1: {
+            type: 'run-function',
+            properties: {
+              service_sid: 'ZS111',
+              environment_sid: 'ZE222',
+              function_sid: 'ZH333',
+              url: 'https://my-service-1234.twil.io/my-fn',
+              parameters: [{ key: 'param1', value: 'test' }],
+            },
+          },
+        },
+      },
+    };
+    const result = deepReplaceWithRefs(obj, refMap);
+    const widget = result.definition.states.run_function_1;
+    expect(widget.properties.service_sid).toBe('@ref:serverless:my-service@@');
+    expect(widget.properties.environment_sid).toBe('@ref:serverlessEnv:my-service:production@@');
+    expect(widget.properties.function_sid).toBe('@ref:serverlessFn:my-service:my-fn@@');
+    expect(widget.properties.url).toBe('@ref:serverlessUrl:my-service:production:/my-fn@@');
+  });
+
   test('replaces SIDs embedded in stringified JSON body', () => {
     const refMap = {
       FW555: '@ref:studioFlows:Main Flow@@',

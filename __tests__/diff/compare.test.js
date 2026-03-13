@@ -248,6 +248,83 @@ describe('diffResources — Studio Flow full definition update', () => {
   });
 });
 
+describe('diffResources — run-function widget', () => {
+  const makeFlow = (name, states) => ({
+    sid: 'FW123',
+    friendlyName: name,
+    status: 'published',
+    definition: {
+      description: 'A flow',
+      states: states,
+      initial_state: 'Trigger',
+      flags: { allow_concurrent_calls: true },
+    },
+  });
+
+  test('preserves run-function widget url and SID refs in update data', () => {
+    const cloud = [
+      makeFlow('Flow A', {
+        Trigger: { type: 'trigger', transitions: [] },
+        run_fn: {
+          type: 'run-function',
+          transitions: [],
+          properties: {
+            service_sid: '@ref:serverless:my-service@@',
+            environment_sid: '@ref:serverlessEnv:my-service:production@@',
+            function_sid: '@ref:serverlessFn:my-service:new-fn@@',
+            url: '@ref:serverlessUrl:my-service:production:/new-fn@@',
+            parameters: [{ key: 'FlowSid', value: '@ref:studioFlows:Main Flow@@' }],
+          },
+        },
+      }),
+    ];
+    const local = [
+      makeFlow('Flow A', {
+        Trigger: { type: 'trigger', transitions: [] },
+        run_fn: {
+          type: 'run-function',
+          transitions: [],
+          properties: {
+            service_sid: '@ref:serverless:my-service@@',
+            environment_sid: '@ref:serverlessEnv:my-service:production@@',
+            function_sid: '@ref:serverlessFn:my-service:old-fn@@',
+            url: '@ref:serverlessUrl:my-service:production:/old-fn@@',
+            parameters: [],
+          },
+        },
+      }),
+    ];
+    const result = diffResources(cloud, local);
+    expect(result).toHaveLength(1);
+    expect(result[0].action).toBe('update');
+    const widget = result[0].data.definition.states.run_fn;
+    expect(widget.properties.url).toBe('@ref:serverlessUrl:my-service:production:/new-fn@@');
+    expect(widget.properties.function_sid).toBe('@ref:serverlessFn:my-service:new-fn@@');
+    expect(widget.properties.parameters[0].value).toBe('@ref:studioFlows:Main Flow@@');
+  });
+
+  test('detects no change when run-function widgets are identical', () => {
+    const states = {
+      Trigger: { type: 'trigger', transitions: [] },
+      run_fn: {
+        type: 'run-function',
+        transitions: [],
+        properties: {
+          service_sid: '@ref:serverless:my-service@@',
+          environment_sid: '@ref:serverlessEnv:my-service:production@@',
+          function_sid: '@ref:serverlessFn:my-service:my-fn@@',
+          url: '@ref:serverlessUrl:my-service:production:/my-fn@@',
+          parameters: [{ key: 'FlowSid', value: '@ref:studioFlows:Main Flow@@' }],
+        },
+      },
+    };
+    const cloud = [makeFlow('Flow A', states)];
+    const local = [makeFlow('Flow A', states)];
+    const result = diffResources(cloud, local);
+    expect(result).toHaveLength(0);
+  });
+});
+
 describe('diffResources — @ref vs SID falso positivo (bug de pull duplo)', () => {
   test('nao deve detectar diferenca quando ambos os lados tem @ref (apos normalizacao)', () => {
     // Apos o fix no pullCommand, ambos os lados sao normalizados com @refs antes da comparacao
