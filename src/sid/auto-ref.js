@@ -76,6 +76,20 @@ export function buildRefMap(allStates, serverlessResources) {
   return map;
 }
 
+function buildDomainMap(refMap) {
+  const domainMap = {};
+  for (const [key, value] of Object.entries(refMap)) {
+    if (!key.startsWith('https://') || !value.startsWith('@ref:serverlessUrl:')) continue;
+    const m = value.match(/@ref:serverlessUrl:([^:]+):([^:]+):/);
+    if (!m) continue;
+    const slashIdx = key.indexOf('/', 8); // after "https://"
+    if (slashIdx === -1) continue;
+    const domain = key.slice(8, slashIdx);
+    domainMap[domain] = { svcName: m[1], envName: m[2] };
+  }
+  return domainMap;
+}
+
 export function deepReplaceWithRefs(obj, refMap) {
   if (obj == null) return obj;
 
@@ -89,5 +103,17 @@ export function deepReplaceWithRefs(obj, refMap) {
   for (const key of sortedKeys) {
     json = json.replaceAll(key, refMap[key]);
   }
+
+  // Fallback: catch remaining URLs on known serverless domains
+  // This handles URLs that didn't exactly match (trailing slashes, query params, etc.)
+  const domainMap = buildDomainMap(refMap);
+  for (const [domain, { svcName, envName }] of Object.entries(domainMap)) {
+    const escaped = domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`https://${escaped}(/[^"]*)`, 'g');
+    json = json.replace(regex, (_match, path) => {
+      return `@ref:serverlessUrl:${svcName}:${envName}:${path}@@`;
+    });
+  }
+
   return JSON.parse(json);
 }

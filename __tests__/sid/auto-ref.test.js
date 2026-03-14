@@ -259,6 +259,36 @@ describe('deepReplaceWithRefs', () => {
     expect(widget.properties.url).toBe('@ref:serverlessUrl:my-service:production:/my-fn@@');
   });
 
+  test('replaces serverless URLs not in refMap via domain fallback', () => {
+    // refMap has URLs for known functions, but widget uses a URL with different path
+    // (e.g. function was updated, or URL format differs slightly)
+    const refMap = {
+      ZS111: '@ref:serverless:my-service@@',
+      'https://my-service-1234.twil.io/known-fn':
+        '@ref:serverlessUrl:my-service:production:/known-fn@@',
+    };
+    const obj = {
+      definition: {
+        states: {
+          run_fn: {
+            type: 'run-function',
+            properties: {
+              service_sid: 'ZS111',
+              url: 'https://my-service-1234.twil.io/other-handler',
+            },
+          },
+        },
+      },
+    };
+    const result = deepReplaceWithRefs(obj, refMap);
+    const widget = result.definition.states.run_fn;
+    expect(widget.properties.service_sid).toBe('@ref:serverless:my-service@@');
+    // URL should be replaced via domain-based fallback
+    expect(widget.properties.url).toBe(
+      '@ref:serverlessUrl:my-service:production:/other-handler@@',
+    );
+  });
+
   test('replaces SIDs embedded in stringified JSON body', () => {
     const refMap = {
       FW555: '@ref:studioFlows:Main Flow@@',
