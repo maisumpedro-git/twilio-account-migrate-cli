@@ -439,4 +439,27 @@ describe('resolveRefs — run-function widget', () => {
       '{"flowSid":"FW555"}',
     );
   });
+
+  test('resolves serverlessFn when function has no path (uses friendlyName)', () => {
+    const stateNoPath = {
+      serverless: {
+        resources: [
+          {
+            sid: 'ZS111',
+            uniqueName: 'my-service',
+            environments: [
+              { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
+            ],
+            functions: [{ sid: 'ZH333', friendlyName: '/my-fn' }],
+          },
+        ],
+      },
+    };
+
+    const obj = {
+      function_sid: '@ref:serverlessFn:my-service:/my-fn@@',
+    };
+    const result = resolveRefs(obj, stateNoPath);
+    expect(result.function_sid).toBe('ZH333');
+  });
 });

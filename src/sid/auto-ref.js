@@ -47,9 +47,10 @@ export function buildRefMap(allStates, serverlessResources) {
       // Build URL mappings for each function in each environment
       if (env.domainName) {
         for (const fn of svc.functions || []) {
-          if (fn.path) {
-            const url = `https://${env.domainName}${fn.path}`;
-            map[url] = `@ref:serverlessUrl:${svcName}:${env.uniqueName}:${fn.path}@@`;
+          const fnPath = fn.path || fn.friendlyName;
+          if (fnPath) {
+            const url = `https://${env.domainName}${fnPath}`;
+            map[url] = `@ref:serverlessUrl:${svcName}:${env.uniqueName}:${fnPath}@@`;
           }
         }
       }
@@ -57,9 +58,10 @@ export function buildRefMap(allStates, serverlessResources) {
       // Build URL mappings for each asset in each environment
       if (env.domainName) {
         for (const asset of svc.assets || []) {
-          if (asset.path) {
-            const url = `https://${env.domainName}${asset.path}`;
-            map[url] = `@ref:serverlessUrl:${svcName}:${env.uniqueName}:${asset.path}@@`;
+          const assetPath = asset.path || asset.friendlyName;
+          if (assetPath) {
+            const url = `https://${env.domainName}${assetPath}`;
+            map[url] = `@ref:serverlessUrl:${svcName}:${env.uniqueName}:${assetPath}@@`;
           }
         }
       }

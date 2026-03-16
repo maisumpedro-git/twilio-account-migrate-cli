@@ -39,7 +39,9 @@ function lookupServerless(type, name, state, runtimeSids) {
   }
 
   if (type === 'serverlessFn') {
-    const fn = (service.functions || []).find((f) => f.friendlyName === rest);
+    const fn = (service.functions || []).find(
+      (f) => f.friendlyName === rest || f.path === rest,
+    );
     return fn?.sid || null;
   }
 
