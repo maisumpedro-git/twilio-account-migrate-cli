@@ -92,6 +92,46 @@ describe('buildRefMap', () => {
     );
   });
 
+  test('uses friendlyName as fallback when fn.path is missing', () => {
+    const allStates = {};
+    const serverless = [
+      {
+        sid: 'ZS111',
+        uniqueName: 'my-service',
+        environments: [
+          { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
+        ],
+        functions: [{ sid: 'ZH333', friendlyName: '/my-fn' }],
+      },
+    ];
+
+    const map = buildRefMap(allStates, serverless);
+    expect(map['https://my-service-1234.twil.io/my-fn']).toBe(
+      '@ref:serverlessUrl:my-service:production:/my-fn@@',
+    );
+    expect(map['ZH333']).toBe('@ref:serverlessFn:my-service:/my-fn@@');
+  });
+
+  test('uses friendlyName as fallback when asset.path is missing', () => {
+    const allStates = {};
+    const serverless = [
+      {
+        sid: 'ZS111',
+        uniqueName: 'my-service',
+        environments: [
+          { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
+        ],
+        functions: [],
+        assets: [{ sid: 'ZN333', friendlyName: '/audio/greeting.mp3' }],
+      },
+    ];
+
+    const map = buildRefMap(allStates, serverless);
+    expect(map['https://my-service-1234.twil.io/audio/greeting.mp3']).toBe(
+      '@ref:serverlessUrl:my-service:production:/audio/greeting.mp3@@',
+    );
+  });
+
   test('sorts replacements by key length (longest first)', () => {
     const allStates = {};
     const serverless = [
@@ -287,6 +327,48 @@ describe('deepReplaceWithRefs', () => {
     expect(widget.properties.url).toBe(
       '@ref:serverlessUrl:my-service:production:/other-handler@@',
     );
+  });
+
+  test('replaces run-function widget URL when fn.path is missing (uses friendlyName)', () => {
+    const allStates = {
+      studioFlows: {
+        resources: [{ sid: 'FW111', friendlyName: 'Main IVR' }],
+      },
+    };
+    const serverless = [
+      {
+        sid: 'ZS111',
+        uniqueName: 'my-service',
+        environments: [
+          { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
+        ],
+        functions: [{ sid: 'ZH333', friendlyName: '/handler' }],
+      },
+    ];
+    const refMap = buildRefMap(allStates, serverless);
+
+    const obj = {
+      definition: {
+        states: [
+          {
+            name: 'run_fn',
+            type: 'run-function',
+            properties: {
+              service_sid: 'ZS111',
+              environment_sid: 'ZE222',
+              function_sid: 'ZH333',
+              url: 'https://my-service-1234.twil.io/handler',
+            },
+          },
+        ],
+      },
+    };
+    const result = deepReplaceWithRefs(obj, refMap);
+    const widget = result.definition.states[0];
+    expect(widget.properties.service_sid).toBe('@ref:serverless:my-service@@');
+    expect(widget.properties.environment_sid).toBe('@ref:serverlessEnv:my-service:production@@');
+    expect(widget.properties.function_sid).toBe('@ref:serverlessFn:my-service:/handler@@');
+    expect(widget.properties.url).toBe('@ref:serverlessUrl:my-service:production:/handler@@');
   });
 
   test('replaces SIDs embedded in stringified JSON body', () => {
