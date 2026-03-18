@@ -74,6 +74,17 @@ describe('diffResources', () => {
     expect(result).toHaveLength(0);
   });
 
+  test('ignores commitMessage and status field differences', () => {
+    const cloud = [
+      { sid: 'FW1', friendlyName: 'Flow A', commitMessage: 'commit A', status: 'published' },
+    ];
+    const local = [
+      { sid: 'FW2', friendlyName: 'Flow A', commitMessage: 'commit B', status: 'draft' },
+    ];
+    const result = diffResources(cloud, local);
+    expect(result).toHaveLength(0);
+  });
+
   test('matches by uniqueName when friendlyName is absent', () => {
     const cloud = [
       { sid: 'HX1', uniqueName: 'template_a', types: { 'twilio/text': { body: 'hello' } } },
