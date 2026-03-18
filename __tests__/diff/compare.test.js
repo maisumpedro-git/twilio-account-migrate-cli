@@ -74,12 +74,12 @@ describe('diffResources', () => {
     expect(result).toHaveLength(0);
   });
 
-  test('ignores commitMessage field differences', () => {
+  test('ignores commitMessage and status field differences', () => {
     const cloud = [
       { sid: 'FW1', friendlyName: 'Flow A', commitMessage: 'commit A', status: 'published' },
     ];
     const local = [
-      { sid: 'FW2', friendlyName: 'Flow A', commitMessage: 'commit B', status: 'published' },
+      { sid: 'FW2', friendlyName: 'Flow A', commitMessage: 'commit B', status: 'draft' },
     ];
     const result = diffResources(cloud, local);
     expect(result).toHaveLength(0);

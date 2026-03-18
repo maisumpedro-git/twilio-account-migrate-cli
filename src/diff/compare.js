@@ -3,6 +3,7 @@ const METADATA_FIELDS = new Set([
   'accountSid',
   'account_sid',
   'commitMessage',
+  'status',
   'dateCreated',
   'date_created',
   'dateUpdated',
