@@ -37,13 +37,21 @@ export async function pullCommand(options) {
   }
 
   // Fetch serverless resources (read-only, for SID/URL mapping)
-  info('Baixando recursos serverless...');
   const api = createClient(account);
-  const serverlessResources = await fetchServerlessServices(api);
-  await writeState(dir, 'serverless', serverlessResources);
+  let serverlessResources;
+  if (!resources) {
+    info('Baixando recursos serverless...');
+    serverlessResources = await fetchServerlessServices(api);
+    await writeState(dir, 'serverless', serverlessResources);
+  }
 
   // Read local state
   const localStates = await readAllStates(dir);
+
+  // When filtering resources, use existing serverless state for @ref mapping
+  if (resources) {
+    serverlessResources = localStates.serverless?.resources || [];
+  }
 
   // Build SID/URL → @ref mapping from ALL fetched data
   const allStatesForRef = {};

@@ -15,6 +15,36 @@ import { createClient } from '../twilio/clients.js';
 import { fetchResource } from '../twilio/fetchers.js';
 import { error, info, success, warn } from '../utils/display.js';
 
+async function updateStateFromResult(state, dir, r) {
+  const { operation, result } = r;
+  const type = operation.type;
+
+  if (operation.action === 'create' && result?.sid) {
+    if (!state[type]) state[type] = { resources: [] };
+    state[type].resources.push({ sid: result.sid, ...operation.data });
+    await writeState(dir, type, state[type].resources);
+  } else if (operation.action === 'update' && result?.sid) {
+    if (state[type]?.resources) {
+      const name = operation.match?.friendlyName || operation.match?.uniqueName;
+      const idx = state[type].resources.findIndex(
+        (res) => res.friendlyName === name || res.uniqueName === name,
+      );
+      if (idx !== -1) {
+        state[type].resources[idx] = { ...state[type].resources[idx], ...operation.data };
+        await writeState(dir, type, state[type].resources);
+      }
+    }
+  } else if (operation.action === 'delete' && result?.deleted) {
+    if (state[type]?.resources) {
+      const name = operation.match?.friendlyName || operation.match?.uniqueName;
+      state[type].resources = state[type].resources.filter(
+        (res) => res.friendlyName !== name && res.uniqueName !== name,
+      );
+      await writeState(dir, type, state[type].resources);
+    }
+  }
+}
+
 export async function pushCommand(options) {
   const { dir, envFile, dryRun } = options;
   const account = loadEnvFile(envFile);
@@ -51,12 +81,7 @@ export async function pushCommand(options) {
           `  ✓ ${r.operation.action} ${r.operation.type}: ${opName} (${r.result?.sid || 'ok'})`,
         );
 
-        if (r.result?.sid && r.operation.action === 'create') {
-          const type = r.operation.type;
-          if (!state[type]) state[type] = { resources: [] };
-          state[type].resources.push({ sid: r.result.sid, ...r.operation.data });
-          await writeState(dir, type, state[type].resources);
-        }
+        await updateStateFromResult(state, dir, r);
       }
 
       await promotePartialToApplied(dir);
@@ -104,12 +129,7 @@ export async function pushCommand(options) {
             `  ✓ ${r.operation.action} ${r.operation.type}: ${opName} (${r.result?.sid || 'ok'})`,
           );
 
-          if (r.result?.sid && r.operation.action === 'create') {
-            const type = r.operation.type;
-            if (!state[type]) state[type] = { resources: [] };
-            state[type].resources.push({ sid: r.result.sid, ...r.operation.data });
-            await writeState(dir, type, state[type].resources);
-          }
+          await updateStateFromResult(state, dir, r);
         }
       }
 
