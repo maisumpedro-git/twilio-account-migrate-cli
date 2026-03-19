@@ -3,9 +3,11 @@ import path from 'node:path';
 
 import fsExtra from 'fs-extra';
 
-const { ensureDir, writeJson } = fsExtra;
+const { ensureDir, readJson, writeJson } = fsExtra;
 
 import { listMigrations } from '../migration/tracker.js';
+import { buildRefMap, deepReplaceWithRefs } from '../sid/auto-ref.js';
+import { readAllStates, readState } from '../state/reader.js';
 import { info } from '../utils/display.js';
 
 function slugify(text) {
@@ -60,4 +62,35 @@ export async function listMigrationsCommand(dir) {
     const date = m.appliedAt ? ` (${m.appliedAt})` : '';
     console.log(`  ${status}  ${m.name}${date}`);
   }
+}
+
+export async function neutralizeMigration(dir, migrationFile) {
+  const filePath = path.isAbsolute(migrationFile)
+    ? migrationFile
+    : path.join(dir, 'migrations', migrationFile);
+
+  const migration = await readJson(filePath);
+
+  const allStates = await readAllStates(dir);
+  const serverless = await readState(dir, 'serverless');
+  const serverlessResources = serverless?.resources || [];
+
+  const refMap = buildRefMap(allStates, serverlessResources);
+
+  if (Object.keys(refMap).length === 0) {
+    info('Nenhum recurso encontrado no state para gerar mapa de @ref.');
+    return;
+  }
+
+  if (migration.operations?.length) {
+    migration.operations = deepReplaceWithRefs(migration.operations, refMap);
+  }
+
+  if (migration.rollback?.length) {
+    migration.rollback = deepReplaceWithRefs(migration.rollback, refMap);
+  }
+
+  await writeJson(filePath, migration, { spaces: 2 });
+
+  return path.basename(filePath);
 }
