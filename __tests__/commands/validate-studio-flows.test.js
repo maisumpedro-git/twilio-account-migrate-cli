@@ -20,10 +20,16 @@ jest.unstable_mockModule('../../src/config.js', () => ({
   }),
 }));
 
-const mockRequest = jest.fn();
+const mockFlowValidateUpdate = jest.fn();
 jest.unstable_mockModule('../../src/twilio/clients.js', () => ({
   createClient: jest.fn().mockReturnValue({
-    request: mockRequest,
+    studio: {
+      v2: {
+        flowValidate: {
+          update: mockFlowValidateUpdate,
+        },
+      },
+    },
   }),
 }));
 
@@ -66,18 +72,14 @@ describe('validateStudioFlowsCommand', () => {
       ],
     };
     readJson.mockResolvedValue(migration);
-    mockRequest.mockResolvedValue({ body: { valid: true } });
+    mockFlowValidateUpdate.mockResolvedValue({ valid: true });
 
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'my-migration.json' });
 
-    expect(mockRequest).toHaveBeenCalledWith({
-      method: 'POST',
-      uri: 'https://studio.twilio.com/v2/Flows/Validate',
-      data: {
-        FriendlyName: 'My Flow',
-        Status: 'published',
-        Definition: JSON.stringify({ description: 'test', states: [] }),
-      },
+    expect(mockFlowValidateUpdate).toHaveBeenCalledWith({
+      friendlyName: 'My Flow',
+      status: 'published',
+      definition: { description: 'test', states: [] },
     });
     expect(mockDisplay.success).toHaveBeenCalledWith(expect.stringContaining('My Flow'));
     expect(mockDisplay.success).toHaveBeenCalledWith(
@@ -103,7 +105,7 @@ describe('validateStudioFlowsCommand', () => {
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
 
     expect(mockDisplay.info).toHaveBeenCalledWith(expect.stringContaining('studioFlows'));
-    expect(mockRequest).not.toHaveBeenCalled();
+    expect(mockFlowValidateUpdate).not.toHaveBeenCalled();
   });
 
   test('skips delete operations', async () => {
@@ -114,7 +116,7 @@ describe('validateStudioFlowsCommand', () => {
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
 
     expect(mockDisplay.warn).toHaveBeenCalledWith(expect.stringContaining('Old Flow'));
-    expect(mockRequest).not.toHaveBeenCalled();
+    expect(mockFlowValidateUpdate).not.toHaveBeenCalled();
   });
 
   test('skips operations without definition', async () => {
@@ -132,78 +134,10 @@ describe('validateStudioFlowsCommand', () => {
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
 
     expect(mockDisplay.warn).toHaveBeenCalledWith(expect.stringContaining('sem definition'));
-    expect(mockRequest).not.toHaveBeenCalled();
+    expect(mockFlowValidateUpdate).not.toHaveBeenCalled();
   });
 
-  test('reports validation errors from API', async () => {
-    const migration = {
-      operations: [
-        {
-          action: 'create',
-          type: 'studioFlows',
-          data: {
-            friendlyName: 'Bad Flow',
-            definition: { invalid: true },
-          },
-        },
-      ],
-    };
-    readJson.mockResolvedValue(migration);
-
-    const apiError = new Error('Validation failed');
-    apiError.details = {
-      errors: [{ message: 'Invalid widget', property_path: '#/states/0' }],
-    };
-    mockRequest.mockRejectedValue(apiError);
-
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
-
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid widget'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('#/states/0'));
-    consoleSpy.mockRestore();
-
-    expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('Bad Flow'));
-    expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('erros'));
-    expect(process.exitCode).toBe(1);
-  });
-
-  test('reports validation errors from API body', async () => {
-    const migration = {
-      operations: [
-        {
-          action: 'create',
-          type: 'studioFlows',
-          data: {
-            friendlyName: 'Bad Flow',
-            definition: { invalid: true },
-          },
-        },
-      ],
-    };
-    readJson.mockResolvedValue(migration);
-
-    const apiError = new Error('Validation failed');
-    apiError.body = {
-      message: 'Flow definition is invalid',
-      details: {
-        errors: [{ message: 'Missing initial state', property_path: '#/states' }],
-      },
-    };
-    mockRequest.mockRejectedValue(apiError);
-
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-    await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
-
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Missing initial state'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('#/states'));
-    consoleSpy.mockRestore();
-
-    expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('Bad Flow'));
-    expect(process.exitCode).toBe(1);
-  });
-
-  test('reports error details when valid is false in response body', async () => {
+  test('reports validation errors with details from API', async () => {
     readJson.mockResolvedValue({
       operations: [
         {
@@ -211,30 +145,113 @@ describe('validateStudioFlowsCommand', () => {
           type: 'studioFlows',
           data: {
             friendlyName: 'Bad Flow',
-            definition: { initial_state: 'test', states: [] },
+            definition: { invalid: true },
           },
         },
       ],
     });
-    mockRequest.mockResolvedValue({
-      body: {
-        valid: false,
-        details: {
-          errors: [{ message: 'must match a widget name', property_path: '#/initial_state' }],
-          warnings: [],
-        },
-      },
-    });
 
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const apiError = new Error('Validation failed');
+    apiError.details = {
+      errors: [{ message: 'Invalid widget', property_path: '#/states/0' }],
+    };
+    mockFlowValidateUpdate.mockRejectedValue(apiError);
+
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
 
     expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('Bad Flow'));
     expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('invalida'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('must match a widget name'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('#/initial_state'));
-    consoleSpy.mockRestore();
+    expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('Invalid widget'));
+    expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('#/states/0'));
+    expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('erros'));
+    expect(process.exitCode).toBe(1);
+  });
 
+  test('reports multiple errors from details', async () => {
+    readJson.mockResolvedValue({
+      operations: [
+        {
+          action: 'create',
+          type: 'studioFlows',
+          data: {
+            friendlyName: 'Bad Flow',
+            definition: { invalid: true },
+          },
+        },
+      ],
+    });
+
+    const apiError = new Error('Validation failed');
+    apiError.details = {
+      errors: [
+        { message: 'must match a widget name', property_path: '#/initial_state' },
+        { message: 'missing required field', property_path: '#/states/0/type' },
+      ],
+    };
+    mockFlowValidateUpdate.mockRejectedValue(apiError);
+
+    await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
+
+    expect(mockDisplay.error).toHaveBeenCalledWith(
+      expect.stringContaining('must match a widget name'),
+    );
+    expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('#/initial_state'));
+    expect(mockDisplay.error).toHaveBeenCalledWith(
+      expect.stringContaining('missing required field'),
+    );
+    expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('#/states/0/type'));
+    expect(process.exitCode).toBe(1);
+  });
+
+  test('reports warnings from details', async () => {
+    readJson.mockResolvedValue({
+      operations: [
+        {
+          action: 'create',
+          type: 'studioFlows',
+          data: {
+            friendlyName: 'Bad Flow',
+            definition: { invalid: true },
+          },
+        },
+      ],
+    });
+
+    const apiError = new Error('Validation failed');
+    apiError.details = {
+      errors: [{ message: 'Invalid widget', property_path: '#/states/0' }],
+      warnings: [{ message: 'Deprecated property', property_path: '#/states/0/props' }],
+    };
+    mockFlowValidateUpdate.mockRejectedValue(apiError);
+
+    await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
+
+    expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('Invalid widget'));
+    expect(mockDisplay.warn).toHaveBeenCalledWith(expect.stringContaining('Deprecated property'));
+    expect(mockDisplay.warn).toHaveBeenCalledWith(expect.stringContaining('#/states/0/props'));
+  });
+
+  test('shows error message when no details available', async () => {
+    readJson.mockResolvedValue({
+      operations: [
+        {
+          action: 'create',
+          type: 'studioFlows',
+          data: {
+            friendlyName: 'Bad Flow',
+            definition: { invalid: true },
+          },
+        },
+      ],
+    });
+
+    const apiError = new Error('Network error');
+    mockFlowValidateUpdate.mockRejectedValue(apiError);
+
+    await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
+
+    expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('Bad Flow'));
+    expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('Network error'));
     expect(process.exitCode).toBe(1);
   });
 
@@ -255,12 +272,12 @@ describe('validateStudioFlowsCommand', () => {
         },
       ],
     });
-    mockRequest.mockResolvedValue({ body: { valid: true } });
+    mockFlowValidateUpdate.mockResolvedValue({ valid: true });
 
     await validateStudioFlowsCommand({ ...baseOpts });
 
     expect(mockDisplay.info).toHaveBeenCalledWith(expect.stringContaining('20260228_130000'));
-    expect(mockRequest).toHaveBeenCalled();
+    expect(mockFlowValidateUpdate).toHaveBeenCalled();
   });
 
   test('shows info when no migrations exist', async () => {
@@ -269,7 +286,7 @@ describe('validateStudioFlowsCommand', () => {
     await validateStudioFlowsCommand({ ...baseOpts });
 
     expect(mockDisplay.info).toHaveBeenCalledWith(expect.stringContaining('migration'));
-    expect(mockRequest).not.toHaveBeenCalled();
+    expect(mockFlowValidateUpdate).not.toHaveBeenCalled();
   });
 
   test('shows info when no pending migrations', async () => {
@@ -280,7 +297,7 @@ describe('validateStudioFlowsCommand', () => {
     await validateStudioFlowsCommand({ ...baseOpts });
 
     expect(mockDisplay.info).toHaveBeenCalledWith(expect.stringContaining('pendente'));
-    expect(mockRequest).not.toHaveBeenCalled();
+    expect(mockFlowValidateUpdate).not.toHaveBeenCalled();
   });
 
   test('shows error when migration file not found', async () => {
@@ -308,13 +325,13 @@ describe('validateStudioFlowsCommand', () => {
         },
       ],
     });
-    mockRequest
-      .mockResolvedValueOnce({ body: { valid: true } })
-      .mockResolvedValueOnce({ body: { valid: true } });
+    mockFlowValidateUpdate
+      .mockResolvedValueOnce({ valid: true })
+      .mockResolvedValueOnce({ valid: true });
 
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'multi.json' });
 
-    expect(mockRequest).toHaveBeenCalledTimes(2);
+    expect(mockFlowValidateUpdate).toHaveBeenCalledTimes(2);
     expect(mockDisplay.info).toHaveBeenCalledWith(expect.stringContaining('2 operacao'));
   });
 
@@ -329,14 +346,31 @@ describe('validateStudioFlowsCommand', () => {
         },
       ],
     });
-    mockRequest.mockResolvedValue({ body: { valid: true } });
+    mockFlowValidateUpdate.mockResolvedValue({ valid: true });
 
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
 
-    expect(mockRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ Definition: defStr }),
-      }),
+    expect(mockFlowValidateUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ definition: defStr }),
+    );
+  });
+
+  test('uses default status published when not specified in operation', async () => {
+    readJson.mockResolvedValue({
+      operations: [
+        {
+          action: 'create',
+          type: 'studioFlows',
+          data: { friendlyName: 'Flow', definition: { states: [] } },
+        },
+      ],
+    });
+    mockFlowValidateUpdate.mockResolvedValue({ valid: true });
+
+    await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
+
+    expect(mockFlowValidateUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'published' }),
     );
   });
 });

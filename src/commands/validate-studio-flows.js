@@ -45,30 +45,22 @@ export async function validateStudioFlowsCommand({ dir, envFile, migrationName }
     }
 
     try {
-      const definitionStr =
-        typeof definition === 'object' ? JSON.stringify(definition) : definition;
-
-      const response = await api.request({
-        method: 'POST',
-        uri: 'https://studio.twilio.com/v2/Flows/Validate',
-        data: {
-          FriendlyName: name,
-          Status: op.data?.status || 'published',
-          Definition: definitionStr,
-        },
+      const result = await api.studio.v2.flowValidate.update({
+        friendlyName: name,
+        status: op.data?.status || 'published',
+        definition,
       });
 
-      if (response.body?.valid) {
+      if (result.valid) {
         success(`  "${name}" (${action}) — definition valida`);
       } else {
         hasErrors = true;
         error(`  "${name}" (${action}) — definition invalida`);
-        printValidationDetails(response.body);
       }
     } catch (err) {
       hasErrors = true;
-      error(`  "${name}" (${action}) — erro na validacao`);
-      printValidationError(err);
+      error(`  "${name}" (${action}) — definition invalida`);
+      printValidationErrors(err);
     }
   }
 
@@ -112,34 +104,26 @@ async function loadMigration(dir, migrationName) {
   return await readJson(path.join(dir, 'migrations', last.name));
 }
 
-function printValidationDetails(body) {
-  const details = body?.details;
-  if (!details) return;
+function printValidationErrors(err) {
+  const details = err.details;
 
-  for (const detail of Object.values(details)) {
-    if (Array.isArray(detail)) {
-      for (const item of detail) {
-        const msg = item.message || item;
-        const itemPath = item.property_path || item.path;
-        const pathStr = itemPath ? ` (path: ${itemPath})` : '';
-        console.error(`    → ${msg}${pathStr}`);
-      }
-    } else if (typeof detail === 'string') {
-      console.error(`    → ${detail}`);
-    } else if (typeof detail === 'object' && detail.message) {
-      console.error(`    → ${detail.message}`);
+  if (details?.errors && Array.isArray(details.errors)) {
+    for (const item of details.errors) {
+      const msg = item.message || JSON.stringify(item);
+      const pathStr = item.property_path ? ` (path: ${item.property_path})` : '';
+      error(`    → ${msg}${pathStr}`);
     }
   }
-}
 
-function printValidationError(err) {
-  const details = err.details || err.body?.details;
+  if (details?.warnings && Array.isArray(details.warnings)) {
+    for (const item of details.warnings) {
+      const msg = item.message || JSON.stringify(item);
+      const pathStr = item.property_path ? ` (path: ${item.property_path})` : '';
+      warn(`    ⚠ ${msg}${pathStr}`);
+    }
+  }
 
-  if (details) {
-    printValidationDetails({ details });
-  } else if (err.body?.message) {
-    console.error(`    → ${err.body.message}`);
-  } else if (err.message) {
-    console.error(`    → ${err.message}`);
+  if (!details) {
+    error(`    → ${err.message}`);
   }
 }
