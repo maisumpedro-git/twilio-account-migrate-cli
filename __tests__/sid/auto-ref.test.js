@@ -160,7 +160,9 @@ describe('deepReplaceWithRefs', () => {
       },
     };
     const result = deepReplaceWithRefs(obj, refMap);
-    expect(result.configuration.task_routing.default_filter.queue).toBe('@ref:taskQueues:Support@@');
+    expect(result.configuration.task_routing.default_filter.queue).toBe(
+      '@ref:taskQueues:Support@@',
+    );
   });
 
   test('replaces URLs embedded in strings', () => {
@@ -222,7 +224,9 @@ describe('deepReplaceWithRefs', () => {
       configuration: { task_routing: { filters: [] } },
     };
     const result = deepReplaceWithRefs(obj, refMap);
-    expect(result.assignmentCallbackUrl).toBe('@ref:serverlessUrl:my-service:production:/callback@@');
+    expect(result.assignmentCallbackUrl).toBe(
+      '@ref:serverlessUrl:my-service:production:/callback@@',
+    );
     // Other fields unchanged
     expect(result.friendlyName).toBe('Main');
   });
@@ -272,8 +276,7 @@ describe('deepReplaceWithRefs', () => {
       ZS111: '@ref:serverless:my-service@@',
       ZE222: '@ref:serverlessEnv:my-service:production@@',
       ZH333: '@ref:serverlessFn:my-service:my-fn@@',
-      'https://my-service-1234.twil.io/my-fn':
-        '@ref:serverlessUrl:my-service:production:/my-fn@@',
+      'https://my-service-1234.twil.io/my-fn': '@ref:serverlessUrl:my-service:production:/my-fn@@',
     };
     const obj = {
       definition: {
@@ -324,9 +327,7 @@ describe('deepReplaceWithRefs', () => {
     const widget = result.definition.states.run_fn;
     expect(widget.properties.service_sid).toBe('@ref:serverless:my-service@@');
     // URL should be replaced via domain-based fallback
-    expect(widget.properties.url).toBe(
-      '@ref:serverlessUrl:my-service:production:/other-handler@@',
-    );
+    expect(widget.properties.url).toBe('@ref:serverlessUrl:my-service:production:/other-handler@@');
   });
 
   test('replaces run-function widget URL when fn.path is missing (uses friendlyName)', () => {
