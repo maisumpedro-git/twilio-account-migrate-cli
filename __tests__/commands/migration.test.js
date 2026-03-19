@@ -4,7 +4,9 @@ import { jest } from '@jest/globals';
 const mockFsExtra = {
   ensureDir: jest.fn(),
   writeJson: jest.fn(),
+  readJson: jest.fn(),
   readdir: jest.fn(),
+  pathExists: jest.fn(),
 };
 jest.unstable_mockModule('fs-extra', () => ({
   default: mockFsExtra,
@@ -20,8 +22,10 @@ jest.unstable_mockModule('../../src/utils/display.js', () => ({
   success: jest.fn(),
 }));
 
-const { createMigration, listMigrationsCommand } = await import('../../src/commands/migration.js');
-const { ensureDir, writeJson } = mockFsExtra;
+const { createMigration, listMigrationsCommand, neutralizeMigration } = await import(
+  '../../src/commands/migration.js'
+);
+const { ensureDir, pathExists, readJson, writeJson } = mockFsExtra;
 const { listMigrations } = await import('../../src/migration/tracker.js');
 const { info } = await import('../../src/utils/display.js');
 
@@ -85,5 +89,172 @@ describe('listMigrationsCommand', () => {
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining('applied'));
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining('pending'));
     spy.mockRestore();
+  });
+});
+
+describe('neutralizeMigration', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  function mockStateFiles(states) {
+    pathExists.mockImplementation((filePath) => {
+      for (const type of Object.keys(states)) {
+        if (filePath.endsWith(`${type}.json`)) return Promise.resolve(true);
+      }
+      return Promise.resolve(false);
+    });
+    readJson.mockImplementation((filePath) => {
+      // Migration file read
+      if (filePath.includes('migrations/')) {
+        return Promise.resolve(readJson._migrationData);
+      }
+      // State file reads
+      for (const [type, data] of Object.entries(states)) {
+        if (filePath.endsWith(`${type}.json`)) return Promise.resolve(data);
+      }
+      return Promise.resolve({ fetchedAt: null, resources: [] });
+    });
+  }
+
+  test('replaces SIDs with @ref in operations and rollback', async () => {
+    const migration = {
+      description: 'manual update',
+      source: 'manual',
+      operations: [
+        {
+          action: 'update',
+          type: 'workflows',
+          match: { friendlyName: 'Main' },
+          data: { configuration: { queue: 'WQ1234567890abcdef1234567890abcd' } },
+        },
+      ],
+      rollback: [
+        {
+          action: 'update',
+          type: 'workflows',
+          match: { friendlyName: 'Main' },
+          data: { configuration: { queue: 'WQ1234567890abcdef1234567890abcd' } },
+        },
+      ],
+    };
+
+    readJson._migrationData = migration;
+    mockStateFiles({
+      taskQueues: {
+        fetchedAt: '2026-01-01',
+        resources: [{ sid: 'WQ1234567890abcdef1234567890abcd', friendlyName: 'Support' }],
+      },
+      taskChannels: { fetchedAt: null, resources: [] },
+      workflows: { fetchedAt: null, resources: [] },
+      workspace: { fetchedAt: null, resources: [] },
+      studioFlows: { fetchedAt: null, resources: [] },
+      contentTemplates: { fetchedAt: null, resources: [] },
+      serverless: { fetchedAt: null, resources: [] },
+    });
+
+    const result = await neutralizeMigration('/env/dev', 'my-migration.json');
+
+    expect(result).toBe('my-migration.json');
+    expect(writeJson).toHaveBeenCalledWith(
+      expect.stringContaining('my-migration.json'),
+      expect.objectContaining({
+        operations: [
+          expect.objectContaining({
+            data: { configuration: { queue: '@ref:taskQueues:Support@@' } },
+          }),
+        ],
+        rollback: [
+          expect.objectContaining({
+            data: { configuration: { queue: '@ref:taskQueues:Support@@' } },
+          }),
+        ],
+      }),
+      { spaces: 2 },
+    );
+  });
+
+  test('returns undefined and shows info when no state resources found', async () => {
+    readJson._migrationData = { operations: [], rollback: [] };
+    mockStateFiles({
+      taskQueues: { fetchedAt: null, resources: [] },
+      taskChannels: { fetchedAt: null, resources: [] },
+      workflows: { fetchedAt: null, resources: [] },
+      workspace: { fetchedAt: null, resources: [] },
+      studioFlows: { fetchedAt: null, resources: [] },
+      contentTemplates: { fetchedAt: null, resources: [] },
+      serverless: { fetchedAt: null, resources: [] },
+    });
+
+    const result = await neutralizeMigration('/env/dev', 'empty.json');
+
+    expect(result).toBeUndefined();
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('@ref'));
+    expect(writeJson).not.toHaveBeenCalled();
+  });
+
+  test('handles absolute migration file path', async () => {
+    readJson._migrationData = {
+      operations: [{ action: 'create', type: 'taskQueues', data: { friendlyName: 'Test' } }],
+      rollback: [],
+    };
+    mockStateFiles({
+      taskQueues: { fetchedAt: null, resources: [] },
+      taskChannels: { fetchedAt: null, resources: [] },
+      workflows: { fetchedAt: null, resources: [] },
+      workspace: { fetchedAt: null, resources: [] },
+      studioFlows: { fetchedAt: null, resources: [] },
+      contentTemplates: { fetchedAt: null, resources: [] },
+      serverless: { fetchedAt: null, resources: [] },
+    });
+
+    // Even with empty state, readJson is called with the absolute path
+    await neutralizeMigration('/env/dev', '/absolute/path/migration.json');
+
+    expect(readJson).toHaveBeenCalledWith('/absolute/path/migration.json');
+  });
+
+  test('replaces serverless URLs with @ref patterns', async () => {
+    const migration = {
+      description: 'manual flow update',
+      source: 'manual',
+      operations: [
+        {
+          action: 'update',
+          type: 'studioFlows',
+          match: { friendlyName: 'IVR' },
+          data: { url: 'https://my-service-1234.twil.io/handler' },
+        },
+      ],
+      rollback: [],
+    };
+
+    readJson._migrationData = migration;
+    mockStateFiles({
+      taskQueues: { fetchedAt: null, resources: [] },
+      taskChannels: { fetchedAt: null, resources: [] },
+      workflows: { fetchedAt: null, resources: [] },
+      workspace: { fetchedAt: null, resources: [] },
+      studioFlows: { fetchedAt: null, resources: [] },
+      contentTemplates: { fetchedAt: null, resources: [] },
+      serverless: {
+        fetchedAt: '2026-01-01',
+        resources: [
+          {
+            sid: 'ZS111',
+            uniqueName: 'my-service',
+            environments: [
+              { sid: 'ZE222', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
+            ],
+            functions: [{ sid: 'ZH333', friendlyName: '/handler', path: '/handler' }],
+          },
+        ],
+      },
+    });
+
+    await neutralizeMigration('/env/dev', 'flow-update.json');
+
+    const written = writeJson.mock.calls[0][1];
+    expect(written.operations[0].data.url).toBe(
+      '@ref:serverlessUrl:my-service:production:/handler@@',
+    );
   });
 });

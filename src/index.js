@@ -3,7 +3,11 @@ import { Command } from 'commander';
 
 import { diffEnvCommand } from './commands/diff-env.js';
 import { diffCommand } from './commands/diff.js';
-import { createMigration, listMigrationsCommand } from './commands/migration.js';
+import {
+  createMigration,
+  listMigrationsCommand,
+  neutralizeMigration,
+} from './commands/migration.js';
 import { pullCommand } from './commands/pull.js';
 import { pushCommand } from './commands/push.js';
 import { revertCommand } from './commands/revert.js';
@@ -81,6 +85,17 @@ migration
   .requiredOption('--dir <path>', 'Diretorio do ambiente')
   .action(async (opts) => {
     await listMigrationsCommand(opts.dir);
+  });
+
+migration
+  .command('neutralize <migration-file>')
+  .description('Substituir SIDs/URLs por @ref em uma migration manual')
+  .requiredOption('--dir <path>', 'Diretorio do ambiente (para ler o state)')
+  .action(async (migrationFile, opts) => {
+    const fileName = await neutralizeMigration(opts.dir, migrationFile);
+    if (fileName) {
+      success(`Migration neutralizada: ${fileName}`);
+    }
   });
 
 program.parseAsync().catch((err) => {
