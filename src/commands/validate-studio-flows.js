@@ -45,13 +45,20 @@ export async function validateStudioFlowsCommand({ dir, envFile, migrationName }
     }
 
     try {
-      const result = await api.studio.v2.flowValidate.create({
-        friendlyName: name,
-        status: op.data?.status || 'published',
-        definition: typeof definition === 'object' ? JSON.stringify(definition) : definition,
+      const definitionStr =
+        typeof definition === 'object' ? JSON.stringify(definition) : definition;
+
+      const response = await api.request({
+        method: 'POST',
+        uri: 'https://studio.twilio.com/v2/Flows/Validate',
+        data: {
+          FriendlyName: name,
+          Status: op.data?.status || 'published',
+          Definition: definitionStr,
+        },
       });
 
-      if (result.valid) {
+      if (response.body?.valid) {
         success(`  "${name}" (${action}) — definition valida`);
       } else {
         hasErrors = true;
@@ -103,18 +110,24 @@ async function loadMigration(dir, migrationName) {
 }
 
 function printValidationError(err) {
-  if (err.details) {
-    for (const detail of Object.values(err.details)) {
+  const details = err.details || err.body?.details;
+
+  if (details) {
+    for (const detail of Object.values(details)) {
       if (Array.isArray(detail)) {
         for (const item of detail) {
           const msg = item.message || item;
-          const path = item.path ? ` (path: ${item.path})` : '';
-          console.error(`    → ${msg}${path}`);
+          const itemPath = item.path ? ` (path: ${item.path})` : '';
+          console.error(`    → ${msg}${itemPath}`);
         }
       } else if (typeof detail === 'string') {
         console.error(`    → ${detail}`);
+      } else if (typeof detail === 'object' && detail.message) {
+        console.error(`    → ${detail.message}`);
       }
     }
+  } else if (err.body?.message) {
+    console.error(`    → ${err.body.message}`);
   } else if (err.message) {
     console.error(`    → ${err.message}`);
   }
