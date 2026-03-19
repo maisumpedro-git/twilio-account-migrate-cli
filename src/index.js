@@ -11,6 +11,7 @@ import {
 import { pullCommand } from './commands/pull.js';
 import { pushCommand } from './commands/push.js';
 import { revertCommand } from './commands/revert.js';
+import { validateStudioFlowsCommand } from './commands/validate-studio-flows.js';
 import { error, success } from './utils/display.js';
 
 const program = new Command();
@@ -96,6 +97,17 @@ migration
     if (fileName) {
       success(`Migration neutralizada: ${fileName}`);
     }
+  });
+
+const studioFlows = migration.command('studioFlows').description('Ferramentas para Studio Flows');
+
+studioFlows
+  .command('validate [migration-name]')
+  .description('Validar definitions de studioFlows em uma migration usando a API do Twilio')
+  .requiredOption('--dir <path>', 'Diretorio do ambiente')
+  .requiredOption('--env-file <path>', 'Caminho para arquivo .env com credenciais')
+  .action(async (migrationName, opts) => {
+    await validateStudioFlowsCommand({ ...opts, migrationName });
   });
 
 program.parseAsync().catch((err) => {
