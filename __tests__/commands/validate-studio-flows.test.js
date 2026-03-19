@@ -20,10 +20,10 @@ jest.unstable_mockModule('../../src/config.js', () => ({
   }),
 }));
 
-const mockFlowValidateCreate = jest.fn();
+const mockRequest = jest.fn();
 jest.unstable_mockModule('../../src/twilio/clients.js', () => ({
   createClient: jest.fn().mockReturnValue({
-    studio: { v2: { flowValidate: { create: mockFlowValidateCreate } } },
+    request: mockRequest,
   }),
 }));
 
@@ -68,14 +68,18 @@ describe('validateStudioFlowsCommand', () => {
       ],
     };
     readJson.mockResolvedValue(migration);
-    mockFlowValidateCreate.mockResolvedValue({ valid: true });
+    mockRequest.mockResolvedValue({ body: { valid: true } });
 
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'my-migration.json' });
 
-    expect(mockFlowValidateCreate).toHaveBeenCalledWith({
-      friendlyName: 'My Flow',
-      status: 'published',
-      definition: JSON.stringify({ description: 'test', states: [] }),
+    expect(mockRequest).toHaveBeenCalledWith({
+      method: 'POST',
+      uri: 'https://studio.twilio.com/v2/Flows/Validate',
+      data: {
+        FriendlyName: 'My Flow',
+        Status: 'published',
+        Definition: JSON.stringify({ description: 'test', states: [] }),
+      },
     });
     expect(mockDisplay.success).toHaveBeenCalledWith(expect.stringContaining('My Flow'));
     expect(mockDisplay.success).toHaveBeenCalledWith(
@@ -101,7 +105,7 @@ describe('validateStudioFlowsCommand', () => {
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
 
     expect(mockDisplay.info).toHaveBeenCalledWith(expect.stringContaining('studioFlows'));
-    expect(mockFlowValidateCreate).not.toHaveBeenCalled();
+    expect(mockRequest).not.toHaveBeenCalled();
   });
 
   test('skips delete operations', async () => {
@@ -114,7 +118,7 @@ describe('validateStudioFlowsCommand', () => {
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
 
     expect(mockDisplay.warn).toHaveBeenCalledWith(expect.stringContaining('Old Flow'));
-    expect(mockFlowValidateCreate).not.toHaveBeenCalled();
+    expect(mockRequest).not.toHaveBeenCalled();
   });
 
   test('skips operations without definition', async () => {
@@ -132,7 +136,7 @@ describe('validateStudioFlowsCommand', () => {
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
 
     expect(mockDisplay.warn).toHaveBeenCalledWith(expect.stringContaining('sem definition'));
-    expect(mockFlowValidateCreate).not.toHaveBeenCalled();
+    expect(mockRequest).not.toHaveBeenCalled();
   });
 
   test('reports validation errors from API', async () => {
@@ -154,7 +158,7 @@ describe('validateStudioFlowsCommand', () => {
     apiError.details = {
       errors: [{ message: 'Invalid widget', path: '/states/0' }],
     };
-    mockFlowValidateCreate.mockRejectedValue(apiError);
+    mockRequest.mockRejectedValue(apiError);
 
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
@@ -162,6 +166,38 @@ describe('validateStudioFlowsCommand', () => {
 
     expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('Bad Flow'));
     expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('erros'));
+    expect(process.exitCode).toBe(1);
+  });
+
+  test('reports validation errors from API body', async () => {
+    const migration = {
+      operations: [
+        {
+          action: 'create',
+          type: 'studioFlows',
+          data: {
+            friendlyName: 'Bad Flow',
+            definition: { invalid: true },
+          },
+        },
+      ],
+    };
+    readJson.mockResolvedValue(migration);
+
+    const apiError = new Error('Validation failed');
+    apiError.body = {
+      message: 'Flow definition is invalid',
+      details: {
+        errors: [{ message: 'Missing initial state', path: '/states' }],
+      },
+    };
+    mockRequest.mockRejectedValue(apiError);
+
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
+    consoleSpy.mockRestore();
+
+    expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('Bad Flow'));
     expect(process.exitCode).toBe(1);
   });
 
@@ -182,12 +218,12 @@ describe('validateStudioFlowsCommand', () => {
         },
       ],
     });
-    mockFlowValidateCreate.mockResolvedValue({ valid: true });
+    mockRequest.mockResolvedValue({ body: { valid: true } });
 
     await validateStudioFlowsCommand({ ...baseOpts });
 
     expect(mockDisplay.info).toHaveBeenCalledWith(expect.stringContaining('20260228_130000'));
-    expect(mockFlowValidateCreate).toHaveBeenCalled();
+    expect(mockRequest).toHaveBeenCalled();
   });
 
   test('shows info when no migrations exist', async () => {
@@ -196,7 +232,7 @@ describe('validateStudioFlowsCommand', () => {
     await validateStudioFlowsCommand({ ...baseOpts });
 
     expect(mockDisplay.info).toHaveBeenCalledWith(expect.stringContaining('migration'));
-    expect(mockFlowValidateCreate).not.toHaveBeenCalled();
+    expect(mockRequest).not.toHaveBeenCalled();
   });
 
   test('shows info when no pending migrations', async () => {
@@ -207,7 +243,7 @@ describe('validateStudioFlowsCommand', () => {
     await validateStudioFlowsCommand({ ...baseOpts });
 
     expect(mockDisplay.info).toHaveBeenCalledWith(expect.stringContaining('pendente'));
-    expect(mockFlowValidateCreate).not.toHaveBeenCalled();
+    expect(mockRequest).not.toHaveBeenCalled();
   });
 
   test('shows error when migration file not found', async () => {
@@ -235,13 +271,13 @@ describe('validateStudioFlowsCommand', () => {
         },
       ],
     });
-    mockFlowValidateCreate
-      .mockResolvedValueOnce({ valid: true })
-      .mockResolvedValueOnce({ valid: true });
+    mockRequest
+      .mockResolvedValueOnce({ body: { valid: true } })
+      .mockResolvedValueOnce({ body: { valid: true } });
 
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'multi.json' });
 
-    expect(mockFlowValidateCreate).toHaveBeenCalledTimes(2);
+    expect(mockRequest).toHaveBeenCalledTimes(2);
     expect(mockDisplay.info).toHaveBeenCalledWith(expect.stringContaining('2 operacao'));
   });
 
@@ -256,12 +292,14 @@ describe('validateStudioFlowsCommand', () => {
         },
       ],
     });
-    mockFlowValidateCreate.mockResolvedValue({ valid: true });
+    mockRequest.mockResolvedValue({ body: { valid: true } });
 
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
 
-    expect(mockFlowValidateCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ definition: defStr }),
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ Definition: defStr }),
+      }),
     );
   });
 });
