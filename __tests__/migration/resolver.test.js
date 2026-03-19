@@ -435,9 +435,7 @@ describe('resolveRefs — run-function widget', () => {
     expect(result.data.definition.states.run_fn.properties.url).toBe(
       'https://my-service-1234.twil.io/my-fn',
     );
-    expect(result.data.definition.states.run_fn.properties.body).toBe(
-      '{"flowSid":"FW555"}',
-    );
+    expect(result.data.definition.states.run_fn.properties.body).toBe('{"flowSid":"FW555"}');
   });
 
   test('resolves serverlessFn when function has no path (uses friendlyName)', () => {

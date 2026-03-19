@@ -39,9 +39,7 @@ const mockDisplay = {
 };
 jest.unstable_mockModule('../../src/utils/display.js', () => mockDisplay);
 
-const { validateStudioFlowsCommand } = await import(
-  '../../src/commands/validate-studio-flows.js'
-);
+const { validateStudioFlowsCommand } = await import('../../src/commands/validate-studio-flows.js');
 const { listMigrations } = await import('../../src/migration/tracker.js');
 const { readJson } = mockFsExtra;
 
@@ -110,9 +108,7 @@ describe('validateStudioFlowsCommand', () => {
 
   test('skips delete operations', async () => {
     readJson.mockResolvedValue({
-      operations: [
-        { action: 'delete', type: 'studioFlows', match: { friendlyName: 'Old Flow' } },
-      ],
+      operations: [{ action: 'delete', type: 'studioFlows', match: { friendlyName: 'Old Flow' } }],
     });
 
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
@@ -156,12 +152,15 @@ describe('validateStudioFlowsCommand', () => {
 
     const apiError = new Error('Validation failed');
     apiError.details = {
-      errors: [{ message: 'Invalid widget', path: '/states/0' }],
+      errors: [{ message: 'Invalid widget', property_path: '#/states/0' }],
     };
     mockRequest.mockRejectedValue(apiError);
 
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid widget'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('#/states/0'));
     consoleSpy.mockRestore();
 
     expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('Bad Flow'));
@@ -188,16 +187,54 @@ describe('validateStudioFlowsCommand', () => {
     apiError.body = {
       message: 'Flow definition is invalid',
       details: {
-        errors: [{ message: 'Missing initial state', path: '/states' }],
+        errors: [{ message: 'Missing initial state', property_path: '#/states' }],
       },
     };
     mockRequest.mockRejectedValue(apiError);
 
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Missing initial state'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('#/states'));
     consoleSpy.mockRestore();
 
     expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('Bad Flow'));
+    expect(process.exitCode).toBe(1);
+  });
+
+  test('reports error details when valid is false in response body', async () => {
+    readJson.mockResolvedValue({
+      operations: [
+        {
+          action: 'create',
+          type: 'studioFlows',
+          data: {
+            friendlyName: 'Bad Flow',
+            definition: { initial_state: 'test', states: [] },
+          },
+        },
+      ],
+    });
+    mockRequest.mockResolvedValue({
+      body: {
+        valid: false,
+        details: {
+          errors: [{ message: 'must match a widget name', property_path: '#/initial_state' }],
+          warnings: [],
+        },
+      },
+    });
+
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    await validateStudioFlowsCommand({ ...baseOpts, migrationName: 'test.json' });
+
+    expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('Bad Flow'));
+    expect(mockDisplay.error).toHaveBeenCalledWith(expect.stringContaining('invalida'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('must match a widget name'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('#/initial_state'));
+    consoleSpy.mockRestore();
+
     expect(process.exitCode).toBe(1);
   });
 
