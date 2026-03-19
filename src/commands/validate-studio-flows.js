@@ -63,6 +63,7 @@ export async function validateStudioFlowsCommand({ dir, envFile, migrationName }
       } else {
         hasErrors = true;
         error(`  "${name}" (${action}) — definition invalida`);
+        printValidationDetails(response.body);
       }
     } catch (err) {
       hasErrors = true;
@@ -100,7 +101,9 @@ async function loadMigration(dir, migrationName) {
 
   const pending = migrations.filter((m) => m.status === 'pending');
   if (pending.length === 0) {
-    info('Nenhuma migration pendente encontrada. Use o nome da migration para validar uma especifica.');
+    info(
+      'Nenhuma migration pendente encontrada. Use o nome da migration para validar uma especifica.',
+    );
     return null;
   }
 
@@ -109,23 +112,31 @@ async function loadMigration(dir, migrationName) {
   return await readJson(path.join(dir, 'migrations', last.name));
 }
 
+function printValidationDetails(body) {
+  const details = body?.details;
+  if (!details) return;
+
+  for (const detail of Object.values(details)) {
+    if (Array.isArray(detail)) {
+      for (const item of detail) {
+        const msg = item.message || item;
+        const itemPath = item.property_path || item.path;
+        const pathStr = itemPath ? ` (path: ${itemPath})` : '';
+        console.error(`    → ${msg}${pathStr}`);
+      }
+    } else if (typeof detail === 'string') {
+      console.error(`    → ${detail}`);
+    } else if (typeof detail === 'object' && detail.message) {
+      console.error(`    → ${detail.message}`);
+    }
+  }
+}
+
 function printValidationError(err) {
   const details = err.details || err.body?.details;
 
   if (details) {
-    for (const detail of Object.values(details)) {
-      if (Array.isArray(detail)) {
-        for (const item of detail) {
-          const msg = item.message || item;
-          const itemPath = item.path ? ` (path: ${item.path})` : '';
-          console.error(`    → ${msg}${itemPath}`);
-        }
-      } else if (typeof detail === 'string') {
-        console.error(`    → ${detail}`);
-      } else if (typeof detail === 'object' && detail.message) {
-        console.error(`    → ${detail.message}`);
-      }
-    }
+    printValidationDetails({ details });
   } else if (err.body?.message) {
     console.error(`    → ${err.body.message}`);
   } else if (err.message) {
