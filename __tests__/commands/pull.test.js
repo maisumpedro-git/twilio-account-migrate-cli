@@ -244,3 +244,59 @@ describe('pullCommand — double pull bug', () => {
     expect(migrationCall).toBeUndefined();
   });
 });
+
+describe('pullCommand — filtered resources', () => {
+  beforeEach(() => {
+    store.clear();
+    jest.clearAllMocks();
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  test('pull com --resources nao deve sobrescrever serverless state', async () => {
+    // Pre-populate serverless state (from a previous full pull)
+    const existingServerless = [
+      {
+        sid: 'ZS555',
+        uniqueName: 'my-service',
+        friendlyName: 'My Service',
+        environments: [
+          { sid: 'ZE666', uniqueName: 'production', domainName: 'my-service-1234.twil.io' },
+        ],
+        functions: [{ sid: 'ZH777', friendlyName: 'callback', path: '/callback' }],
+        assets: [],
+      },
+    ];
+    store.set('/env/dev/state/serverless.json', {
+      fetchedAt: '2026-01-01T00:00:00.000Z',
+      resources: existingServerless,
+    });
+
+    mockFetchResource.mockImplementation(async (_account, type) => {
+      if (type === 'studioFlows') return [];
+      return [];
+    });
+    mockFetchServerlessServices.mockResolvedValue([]);
+
+    await pullCommand({ dir: '/env/dev', envFile: '.env.dev', resources: 'studioFlows' });
+
+    // Serverless state should NOT have been overwritten
+    const serverlessState = store.get('/env/dev/state/serverless.json');
+    expect(serverlessState.resources).toEqual(existingServerless);
+
+    // fetchServerlessServices should NOT have been called
+    expect(mockFetchServerlessServices).not.toHaveBeenCalled();
+  });
+
+  test('pull sem --resources deve atualizar serverless state', async () => {
+    setupBasicCloudData();
+
+    await pullCommand({ dir: '/env/dev', envFile: '.env.dev' });
+
+    // fetchServerlessServices should have been called
+    expect(mockFetchServerlessServices).toHaveBeenCalled();
+
+    // serverless.json should have been written
+    const serverlessState = store.get('/env/dev/state/serverless.json');
+    expect(serverlessState).toBeDefined();
+  });
+});
