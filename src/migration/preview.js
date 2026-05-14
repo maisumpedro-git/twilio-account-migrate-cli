@@ -1,6 +1,7 @@
-import { resolveRefs } from './resolver.js';
 import { fetchResource } from '../twilio/fetchers.js';
 import { info, printAddedField, printFieldDiff, printRemovedField, warn } from '../utils/display.js';
+
+import { resolveRefs } from './resolver.js';
 
 const cache = new Map();
 

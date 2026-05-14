@@ -8,7 +8,8 @@ import { generateMigration } from '../migration/generator.js';
 import { buildRefMap, deepReplaceWithRefs } from '../sid/auto-ref.js';
 import { readAllStates, readState } from '../state/reader.js';
 import { RESOURCE_TYPES } from '../twilio/fetchers.js';
-import { info, success } from '../utils/display.js';
+import { info, success, warn } from '../utils/display.js';
+import { promptChoice } from '../utils/prompt.js';
 
 function timestamp() {
   const now = new Date();
@@ -17,8 +18,33 @@ function timestamp() {
   return `${d}_${t}`;
 }
 
+async function reviewOperations(operations) {
+  const accepted = [];
+  for (let i = 0; i < operations.length; i++) {
+    const op = operations[i];
+    const name = op.data?.friendlyName || op.match?.friendlyName || '?';
+    console.log(`\n[${i + 1}/${operations.length}] ${op.action} ${op.type}: ${name}`);
+    if (op.action === 'update' && op.data) {
+      const fields = Object.keys(op.data).slice(0, 5).join(', ');
+      console.log(`  campos: ${fields}${Object.keys(op.data).length > 5 ? ', ...' : ''}`);
+    }
+    const choice = await promptChoice('Aceitar?', [
+      { key: 'a', label: 'aceitar' },
+      { key: 's', label: 'skip' },
+      { key: 'q', label: 'quit' },
+    ]);
+    if (choice === 'a') {
+      accepted.push(op);
+    } else if (choice === 'q') {
+      warn(`Revisao interrompida; ${accepted.length}/${operations.length} aceita(s).`);
+      return accepted;
+    }
+  }
+  return accepted;
+}
+
 export async function diffEnvCommand(options) {
-  const { source, target, resources } = options;
+  const { source, target, resources, review } = options;
   const types = resources
     ? resources.split(',').map((t) => t.trim())
     : RESOURCE_TYPES.filter((t) => t !== 'workspace');
@@ -70,6 +96,16 @@ export async function diffEnvCommand(options) {
 
   // Override source field
   migration.source = 'env-diff';
+
+  if (review) {
+    info(`Revisao interativa: ${migration.operations.length} operacao(oes).`);
+    const accepted = await reviewOperations(migration.operations);
+    if (accepted.length === 0) {
+      warn('Nenhuma operacao aceita; nada sera escrito.');
+      return;
+    }
+    migration.operations = accepted;
+  }
 
   const migrationsDir = path.join(target, 'migrations');
   await ensureDir(migrationsDir);

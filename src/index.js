@@ -70,6 +70,7 @@ program
   .requiredOption('--source <path>', 'Diretorio do ambiente de referencia (atualizado)')
   .requiredOption('--target <path>', 'Diretorio do ambiente a ser atualizado')
   .option('--resources <types>', 'Tipos de recursos separados por virgula')
+  .option('--review', 'Revisao interativa: aceitar/skipar cada operacao antes de salvar')
   .action(async (opts) => {
     await diffEnvCommand(opts);
   });

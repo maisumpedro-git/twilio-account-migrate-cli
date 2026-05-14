@@ -1,6 +1,6 @@
 import { loadEnvFile } from '../config.js';
-import { executeMigration } from '../migration/executor.js';
 import { detectDrift } from '../migration/drift-check.js';
+import { executeMigration } from '../migration/executor.js';
 import { lintMigration, summarizeIssues } from '../migration/linter.js';
 import { previewMigration } from '../migration/preview.js';
 import { validateStudioFlowsOperations } from '../migration/studio-validator.js';
