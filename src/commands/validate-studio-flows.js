@@ -9,6 +9,7 @@ import { loadEnvFile } from '../config.js';
 import { listMigrations } from '../migration/tracker.js';
 import { createClient } from '../twilio/clients.js';
 import { error, info, success, warn } from '../utils/display.js';
+import { printTwilioError } from '../utils/twilio-error.js';
 
 export async function validateStudioFlowsCommand({ dir, envFile, migrationName }) {
   const account = loadEnvFile(envFile);
@@ -60,7 +61,7 @@ export async function validateStudioFlowsCommand({ dir, envFile, migrationName }
     } catch (err) {
       hasErrors = true;
       error(`  "${name}" (${action}) — definition invalida`);
-      printValidationErrors(err);
+      printTwilioError(err);
     }
   }
 
@@ -104,26 +105,3 @@ async function loadMigration(dir, migrationName) {
   return await readJson(path.join(dir, 'migrations', last.name));
 }
 
-function printValidationErrors(err) {
-  const details = err.details;
-
-  if (details?.errors && Array.isArray(details.errors)) {
-    for (const item of details.errors) {
-      const msg = item.message || JSON.stringify(item);
-      const pathStr = item.property_path ? ` (path: ${item.property_path})` : '';
-      error(`    → ${msg}${pathStr}`);
-    }
-  }
-
-  if (details?.warnings && Array.isArray(details.warnings)) {
-    for (const item of details.warnings) {
-      const msg = item.message || JSON.stringify(item);
-      const pathStr = item.property_path ? ` (path: ${item.property_path})` : '';
-      warn(`    ⚠ ${msg}${pathStr}`);
-    }
-  }
-
-  if (!details) {
-    error(`    → ${err.message}`);
-  }
-}

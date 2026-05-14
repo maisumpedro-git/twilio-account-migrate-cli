@@ -12,7 +12,8 @@ import { pullCommand } from './commands/pull.js';
 import { pushCommand } from './commands/push.js';
 import { revertCommand } from './commands/revert.js';
 import { validateStudioFlowsCommand } from './commands/validate-studio-flows.js';
-import { error, success } from './utils/display.js';
+import { success } from './utils/display.js';
+import { printTwilioError } from './utils/twilio-error.js';
 
 const program = new Command();
 
@@ -111,6 +112,6 @@ studioFlows
   });
 
 program.parseAsync().catch((err) => {
-  error(err.message);
+  printTwilioError(err);
   process.exit(1);
 });

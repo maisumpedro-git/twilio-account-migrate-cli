@@ -75,6 +75,48 @@ describe('executeMigration', () => {
     expect(executeOperation).toHaveBeenCalledTimes(2);
   });
 
+  test('wraps thrown error with operation context and preserves Twilio details', async () => {
+    const apiErr = new Error('Validation failed');
+    apiErr.status = 400;
+    apiErr.code = 20001;
+    apiErr.moreInfo = 'https://example.com';
+    apiErr.details = { errors: [{ message: 'bad', property_path: '#/x' }] };
+
+    executeOperation.mockRejectedValueOnce(apiErr);
+
+    const migration = {
+      operations: [
+        {
+          action: 'update',
+          type: 'studioFlows',
+          match: { friendlyName: 'Main IVR' },
+          data: { friendlyName: 'Main IVR', definition: {} },
+        },
+      ],
+    };
+
+    let caught;
+    try {
+      await executeMigration(mockApi, migration, state, 'WS1');
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeDefined();
+    expect(caught.message).toContain('Operação 1/1');
+    expect(caught.message).toContain('update studioFlows: Main IVR');
+    expect(caught.message).toContain('Validation failed');
+    expect(caught.details).toBe(apiErr.details);
+    expect(caught.status).toBe(400);
+    expect(caught.code).toBe(20001);
+    expect(caught.moreInfo).toBe('https://example.com');
+    expect(caught.operationIndex).toBe(0);
+    expect(caught.operationAction).toBe('update');
+    expect(caught.operationType).toBe('studioFlows');
+    expect(caught.operationName).toBe('Main IVR');
+    expect(caught.cause).toBe(apiErr);
+  });
+
   test('dry-run mode skips actual execution and returns dry-run status', async () => {
     const migration = {
       operations: [
