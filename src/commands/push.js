@@ -1,6 +1,7 @@
 import { loadEnvFile } from '../config.js';
 import { executeMigration } from '../migration/executor.js';
 import { lintMigration, summarizeIssues } from '../migration/linter.js';
+import { previewMigration } from '../migration/preview.js';
 import { validateStudioFlowsOperations } from '../migration/studio-validator.js';
 import {
   getPartiallyApplied,
@@ -89,7 +90,7 @@ async function updateStateFromResult(state, dir, r) {
 }
 
 export async function pushCommand(options) {
-  const { dir, envFile, dryRun } = options;
+  const { dir, envFile, dryRun, verbose } = options;
   const account = loadEnvFile(envFile);
   const api = createClient(account);
 
@@ -170,16 +171,20 @@ export async function pushCommand(options) {
             },
       });
 
-      for (const r of results) {
-        const opName = r.operation.data?.friendlyName || r.operation.match?.friendlyName || '?';
-        if (dryRun) {
-          console.log(`  [dry-run] ${r.operation.action} ${r.operation.type}: ${opName}`);
-        } else {
-          console.log(
-            `  ✓ ${r.operation.action} ${r.operation.type}: ${opName} (${r.result?.sid || 'ok'})`,
-          );
+      if (dryRun && verbose) {
+        await previewMigration(account, state, migration.operations);
+      } else {
+        for (const r of results) {
+          const opName = r.operation.data?.friendlyName || r.operation.match?.friendlyName || '?';
+          if (dryRun) {
+            console.log(`  [dry-run] ${r.operation.action} ${r.operation.type}: ${opName}`);
+          } else {
+            console.log(
+              `  ✓ ${r.operation.action} ${r.operation.type}: ${opName} (${r.result?.sid || 'ok'})`,
+            );
 
-          await updateStateFromResult(state, dir, r);
+            await updateStateFromResult(state, dir, r);
+          }
         }
       }
 

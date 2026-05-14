@@ -39,6 +39,7 @@ program
   .requiredOption('--dir <path>', 'Diretorio do ambiente')
   .requiredOption('--env-file <path>', 'Caminho para arquivo .env com credenciais')
   .option('--dry-run', 'Mostrar o que seria feito sem executar')
+  .option('--verbose', 'Em conjunto com --dry-run: faz refetch e mostra diff por campo')
   .action(async (opts) => {
     await pushCommand(opts);
   });

@@ -85,6 +85,9 @@ jest.unstable_mockModule('../../src/utils/display.js', () => ({
   success: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
+  printAddedField: jest.fn(),
+  printRemovedField: jest.fn(),
+  printFieldDiff: jest.fn(),
 }));
 
 const { pushCommand } = await import('../../src/commands/push.js');
