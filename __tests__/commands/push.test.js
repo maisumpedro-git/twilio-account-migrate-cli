@@ -66,6 +66,14 @@ jest.unstable_mockModule('../../src/migration/executor.js', () => ({
   executeMigration: mockExecuteMigration,
 }));
 
+const mockValidateStudioFlowsOperations = jest
+  .fn()
+  .mockResolvedValue({ ok: true, checked: 0, failures: [] });
+
+jest.unstable_mockModule('../../src/migration/studio-validator.js', () => ({
+  validateStudioFlowsOperations: mockValidateStudioFlowsOperations,
+}));
+
 const mockValidateMigration = jest.fn();
 
 jest.unstable_mockModule('../../src/migration/validator.js', () => ({
@@ -107,6 +115,11 @@ describe('pushCommand — state updates', () => {
     jest.clearAllMocks();
     jest.spyOn(console, 'log').mockImplementation(() => {});
     mockFetchResource.mockResolvedValue({ sid: 'WS_WORKSPACE' });
+    mockValidateStudioFlowsOperations.mockResolvedValue({
+      ok: true,
+      checked: 0,
+      failures: [],
+    });
   });
 
   test('create operation adds resource to state', async () => {
@@ -272,6 +285,39 @@ describe('pushCommand — state updates', () => {
       'skills HAS "support"',
     );
     expect(queues.find((q) => q.friendlyName === 'Old')).toBeUndefined();
+  });
+
+  test('aborts before executeMigration when studio flow pre-validation fails', async () => {
+    const migrationName = '20260301_100000_bad-flow.json';
+    const migration = {
+      description: 'bad flow',
+      operations: [
+        {
+          action: 'create',
+          type: 'studioFlows',
+          data: { friendlyName: 'Bad Flow', definition: { invalid: true } },
+        },
+      ],
+      rollback: [],
+    };
+
+    seedMigrationsTracker('/env/dev', { applied: [] });
+    seedMigrationFile('/env/dev', migrationName, migration);
+
+    const apiErr = new Error('Validation failed');
+    apiErr.details = { errors: [{ message: 'bad widget', property_path: '#/states/0' }] };
+    mockValidateStudioFlowsOperations.mockResolvedValueOnce({
+      ok: false,
+      checked: 1,
+      failures: [{ name: 'Bad Flow', action: 'create', err: apiErr }],
+    });
+
+    await pushCommand({ dir: '/env/dev', envFile: '.env.dev' });
+
+    expect(mockValidateStudioFlowsOperations).toHaveBeenCalled();
+    expect(mockExecuteMigration).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(1);
+    process.exitCode = undefined;
   });
 
   test('dry-run does not modify state', async () => {

@@ -25,7 +25,12 @@ export async function executeMigration(
       continue;
     }
 
-    const result = await executeOperation(api, resolved, workspaceSid, state);
+    let result;
+    try {
+      result = await executeOperation(api, resolved, workspaceSid, state);
+    } catch (err) {
+      throw wrapOperationError(err, resolved, i, migration.operations.length);
+    }
     results.push({ operation: resolved, status: 'ok', result });
 
     // Track created SIDs for subsequent @ref resolution
@@ -43,4 +48,20 @@ export async function executeMigration(
   }
 
   return results;
+}
+
+function wrapOperationError(err, operation, index, total) {
+  const name = operation.data?.friendlyName || operation.match?.friendlyName || operation.data?.uniqueName || operation.match?.uniqueName || '?';
+  const context = `Operação ${index + 1}/${total} (${operation.action} ${operation.type}: ${name})`;
+  const wrapped = new Error(`${context} falhou: ${err?.message || err}`);
+  wrapped.cause = err;
+  if (err?.details !== undefined) wrapped.details = err.details;
+  if (err?.status !== undefined) wrapped.status = err.status;
+  if (err?.code !== undefined) wrapped.code = err.code;
+  if (err?.moreInfo !== undefined) wrapped.moreInfo = err.moreInfo;
+  wrapped.operationIndex = index;
+  wrapped.operationAction = operation.action;
+  wrapped.operationType = operation.type;
+  wrapped.operationName = name;
+  return wrapped;
 }

@@ -1,5 +1,6 @@
 import { loadEnvFile } from '../config.js';
 import { executeMigration } from '../migration/executor.js';
+import { validateStudioFlowsOperations } from '../migration/studio-validator.js';
 import {
   getPartiallyApplied,
   getPendingMigrations,
@@ -14,6 +15,23 @@ import { writeState } from '../state/writer.js';
 import { createClient } from '../twilio/clients.js';
 import { fetchResource } from '../twilio/fetchers.js';
 import { error, info, success, warn } from '../utils/display.js';
+import { printTwilioError } from '../utils/twilio-error.js';
+
+async function preValidateStudioFlows(api, migrationName, operations) {
+  const { ok, checked, failures } = await validateStudioFlowsOperations(api, operations);
+  if (checked === 0) return true;
+  if (ok) {
+    info(`Pré-validação de Studio Flows OK (${checked} flow(s)).`);
+    return true;
+  }
+  error(`Pré-validação de Studio Flows falhou em ${migrationName}:`);
+  for (const f of failures) {
+    printTwilioError(f.err, { prefix: `Studio Flow "${f.name}" (${f.action}) inválida` });
+  }
+  info('Push abortado antes de qualquer alteração no cloud. Corrija as definitions e tente novamente.');
+  process.exitCode = 1;
+  return false;
+}
 
 async function updateStateFromResult(state, dir, r) {
   const { operation, result } = r;
@@ -67,6 +85,9 @@ export async function pushCommand(options) {
     const migration = await readMigrationFile(dir, partial.name);
     validateMigration(migration);
 
+    const pendingOps = migration.operations.slice(partial.lastOperationIndex);
+    if (!(await preValidateStudioFlows(api, partial.name, pendingOps))) return;
+
     try {
       const results = await executeMigration(api, migration, state, workspaceSid, {
         startIndex: partial.lastOperationIndex,
@@ -87,7 +108,7 @@ export async function pushCommand(options) {
       await promotePartialToApplied(dir);
       success(`Retomada completa: ${partial.name}`);
     } catch (err) {
-      error(`Erro na operacao: ${err.message}`);
+      printTwilioError(err, { prefix: `Erro ao retomar ${partial.name}` });
       return;
     }
   }
@@ -109,6 +130,8 @@ export async function pushCommand(options) {
     info(`Aplicando: ${name}...`);
     const migration = await readMigrationFile(dir, name);
     validateMigration(migration);
+
+    if (!dryRun && !(await preValidateStudioFlows(api, name, migration.operations))) return;
 
     try {
       const results = await executeMigration(api, migration, state, workspaceSid, {
@@ -139,7 +162,7 @@ export async function pushCommand(options) {
       }
     } catch (err) {
       if (!dryRun) {
-        error(`Erro ao aplicar ${name}: ${err.message}`);
+        printTwilioError(err, { prefix: `Erro ao aplicar ${name}` });
         info(`Migration salva como partially_applied. Execute push novamente para retomar.`);
       }
       return;
