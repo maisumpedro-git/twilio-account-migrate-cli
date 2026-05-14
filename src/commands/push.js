@@ -12,6 +12,7 @@ import {
   readMigrationFile,
 } from '../migration/tracker.js';
 import { validateMigration } from '../migration/validator.js';
+import { createBackup, pruneBackups } from '../state/backup.js';
 import { readAllStates } from '../state/reader.js';
 import { writeState } from '../state/writer.js';
 import { createClient } from '../twilio/clients.js';
@@ -152,6 +153,18 @@ export async function pushCommand(options) {
   }
 
   const state = await readAllStates(dir);
+
+  if (!dryRun && pending.length > 0) {
+    try {
+      const backupPath = await createBackup(dir);
+      if (backupPath) {
+        info(`Backup do state criado em: ${backupPath}`);
+        await pruneBackups(dir, 5);
+      }
+    } catch (err) {
+      warn(`Falha ao criar backup do state: ${err.message} (push continuara)`);
+    }
+  }
 
   for (const name of pending) {
     info(`Aplicando: ${name}...`);
