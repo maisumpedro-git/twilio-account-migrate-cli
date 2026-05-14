@@ -5,6 +5,7 @@ import { diffEnvCommand } from './commands/diff-env.js';
 import { diffCommand } from './commands/diff.js';
 import {
   createMigration,
+  lintMigrationCommand,
   listMigrationsCommand,
   neutralizeMigration,
 } from './commands/migration.js';
@@ -87,6 +88,14 @@ migration
   .requiredOption('--dir <path>', 'Diretorio do ambiente')
   .action(async (opts) => {
     await listMigrationsCommand(opts.dir);
+  });
+
+migration
+  .command('lint <migration-file>')
+  .description('Validar @refs, matches e duplicidades em uma migration contra o state local')
+  .requiredOption('--dir <path>', 'Diretorio do ambiente')
+  .action(async (migrationFile, opts) => {
+    await lintMigrationCommand(opts.dir, migrationFile);
   });
 
 migration

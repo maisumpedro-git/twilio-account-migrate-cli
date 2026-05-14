@@ -1,4 +1,4 @@
-const EMBEDDED_REF_PATTERN = /@ref:(\w+):(.+?)(?:@@|(?=@ref:)|(?=\\?")|$)/g;
+export const EMBEDDED_REF_PATTERN = /@ref:(\w+):(.+?)(?:@@|(?=@ref:)|(?=\\?")|$)/g;
 
 const SERVERLESS_TYPES = new Set(['serverless', 'serverlessEnv', 'serverlessFn', 'serverlessUrl']);
 
@@ -59,10 +59,14 @@ function lookupServerless(type, name, state, runtimeSids) {
   return null;
 }
 
-function resolveRef(type, name, state, runtimeSids) {
-  const result = SERVERLESS_TYPES.has(type)
+export function tryResolveRef(type, name, state, runtimeSids = {}) {
+  return SERVERLESS_TYPES.has(type)
     ? lookupServerless(type, name, state, runtimeSids)
     : lookupSid(type, name, state, runtimeSids);
+}
+
+function resolveRef(type, name, state, runtimeSids) {
+  const result = tryResolveRef(type, name, state, runtimeSids);
   if (!result) {
     throw new Error(
       `Referencia nao resolvida: @ref:${type}:${name} — recurso nao encontrado no state`,

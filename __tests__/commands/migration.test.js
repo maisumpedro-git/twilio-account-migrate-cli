@@ -20,6 +20,8 @@ jest.unstable_mockModule('../../src/migration/tracker.js', () => ({
 jest.unstable_mockModule('../../src/utils/display.js', () => ({
   info: jest.fn(),
   success: jest.fn(),
+  error: jest.fn(),
+  warn: jest.fn(),
 }));
 
 const { createMigration, listMigrationsCommand, neutralizeMigration } = await import(

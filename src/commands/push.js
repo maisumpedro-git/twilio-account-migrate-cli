@@ -1,5 +1,6 @@
 import { loadEnvFile } from '../config.js';
 import { executeMigration } from '../migration/executor.js';
+import { lintMigration, summarizeIssues } from '../migration/linter.js';
 import { validateStudioFlowsOperations } from '../migration/studio-validator.js';
 import {
   getPartiallyApplied,
@@ -16,6 +17,30 @@ import { createClient } from '../twilio/clients.js';
 import { fetchResource } from '../twilio/fetchers.js';
 import { error, info, success, warn } from '../utils/display.js';
 import { printTwilioError } from '../utils/twilio-error.js';
+
+function lintBeforePush(migrationName, migration, state) {
+  const issues = lintMigration(migration, state);
+  const { errors, warnings } = summarizeIssues(issues);
+  if (errors === 0 && warnings === 0) return true;
+
+  for (const issue of issues) {
+    const opLabel = issue.op >= 0 ? `op[${issue.op}]` : 'migration';
+    if (issue.severity === 'error') {
+      error(`  ${opLabel}: ${issue.message}`);
+    } else {
+      warn(`  ${opLabel}: ${issue.message}`);
+    }
+  }
+
+  if (errors > 0) {
+    error(`Lint falhou em ${migrationName}: ${errors} erro(s).`);
+    info('Push abortado antes de qualquer alteração no cloud.');
+    process.exitCode = 1;
+    return false;
+  }
+  warn(`Lint com ${warnings} aviso(s); prosseguindo.`);
+  return true;
+}
 
 async function preValidateStudioFlows(api, migrationName, operations) {
   const { ok, checked, failures } = await validateStudioFlowsOperations(api, operations);
@@ -84,6 +109,7 @@ export async function pushCommand(options) {
     const state = await readAllStates(dir);
     const migration = await readMigrationFile(dir, partial.name);
     validateMigration(migration);
+    if (!lintBeforePush(partial.name, migration, state)) return;
 
     const pendingOps = migration.operations.slice(partial.lastOperationIndex);
     if (!(await preValidateStudioFlows(api, partial.name, pendingOps))) return;
@@ -131,6 +157,7 @@ export async function pushCommand(options) {
     const migration = await readMigrationFile(dir, name);
     validateMigration(migration);
 
+    if (!dryRun && !lintBeforePush(name, migration, state)) return;
     if (!dryRun && !(await preValidateStudioFlows(api, name, migration.operations))) return;
 
     try {

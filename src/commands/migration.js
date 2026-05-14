@@ -5,10 +5,11 @@ import fsExtra from 'fs-extra';
 
 const { ensureDir, readJson, writeJson } = fsExtra;
 
+import { lintMigration, summarizeIssues } from '../migration/linter.js';
 import { listMigrations } from '../migration/tracker.js';
 import { buildRefMap, deepReplaceWithRefs } from '../sid/auto-ref.js';
 import { readAllStates, readState } from '../state/reader.js';
-import { info } from '../utils/display.js';
+import { error, info, success, warn } from '../utils/display.js';
 
 function slugify(text) {
   return text
@@ -61,6 +62,49 @@ export async function listMigrationsCommand(dir) {
     const status = m.status === 'applied' ? '\u2713 applied' : '\u25CB pending';
     const date = m.appliedAt ? ` (${m.appliedAt})` : '';
     console.log(`  ${status}  ${m.name}${date}`);
+  }
+}
+
+export async function lintMigrationCommand(dir, migrationFile) {
+  const filePath = path.isAbsolute(migrationFile)
+    ? migrationFile
+    : path.join(dir, 'migrations', migrationFile);
+
+  let migration;
+  try {
+    migration = await readJson(filePath);
+  } catch {
+    error(`Migration nao encontrada: ${migrationFile}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const state = await readAllStates(dir);
+
+  info(`Lint: ${path.basename(filePath)} (${migration.operations?.length || 0} operacao(oes))`);
+
+  const issues = lintMigration(migration, state);
+  const { errors, warnings } = summarizeIssues(issues);
+
+  for (const issue of issues) {
+    const opLabel = issue.op >= 0 ? `op[${issue.op}]` : 'migration';
+    if (issue.severity === 'error') {
+      error(`  ${opLabel}: ${issue.message}`);
+    } else {
+      warn(`  ${opLabel}: ${issue.message}`);
+    }
+  }
+
+  if (errors === 0 && warnings === 0) {
+    success('Sem problemas detectados.');
+    return;
+  }
+
+  if (errors > 0) {
+    error(`Lint falhou: ${errors} erro(s), ${warnings} warning(s).`);
+    process.exitCode = 1;
+  } else {
+    warn(`Lint com avisos: ${warnings} warning(s).`);
   }
 }
 
