@@ -1,3 +1,5 @@
+import { tryParseJson } from '../utils/json.js';
+
 import { createClient } from './clients.js';
 
 export const RESOURCE_TYPES = [
@@ -173,15 +175,6 @@ async function fetchServerlessServices(api) {
     return result;
   } catch {
     return [];
-  }
-}
-
-function tryParseJson(val) {
-  if (!val || typeof val !== 'string') return val;
-  try {
-    return JSON.parse(val);
-  } catch {
-    return val;
   }
 }
 

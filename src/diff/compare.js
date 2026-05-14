@@ -1,3 +1,5 @@
+import { tryParseJson } from '../utils/json.js';
+
 const METADATA_FIELDS = new Set([
   'sid',
   'accountSid',
@@ -10,7 +12,10 @@ const METADATA_FIELDS = new Set([
   'date_updated',
   'url',
   'links',
+  'revision',
 ]);
+
+const JSON_FIELDS = new Set(['definition', 'configuration', 'types', 'variables']);
 
 function resourceKey(item) {
   return item.friendlyName || item.uniqueName || item.sid;
@@ -22,7 +27,7 @@ function stripMetadata(obj) {
   const cleaned = {};
   for (const [key, val] of Object.entries(obj)) {
     if (METADATA_FIELDS.has(key)) continue;
-    cleaned[key] = val;
+    cleaned[key] = JSON_FIELDS.has(key) ? tryParseJson(val) : val;
   }
   return cleaned;
 }
@@ -43,14 +48,16 @@ function deepEqual(a, b) {
   return keysA.every((key) => deepEqual(a[key], b[key]));
 }
 
-function changedFields(cloudItem, localItem) {
-  const cleanCloud = stripMetadata(cloudItem);
-  const cleanLocal = stripMetadata(localItem);
+export function changedFields(desiredItem, currentItem) {
+  const cleanDesired = stripMetadata(desiredItem);
+  const cleanCurrent = stripMetadata(currentItem);
   const changed = {};
-  for (const [key, val] of Object.entries(cleanCloud)) {
-    if (!deepEqual(val, cleanLocal[key])) {
-      changed[key] = val;
-    }
+  const allKeys = new Set([...Object.keys(cleanDesired), ...Object.keys(cleanCurrent)]);
+  for (const key of allKeys) {
+    const desiredVal = cleanDesired[key];
+    const currentVal = cleanCurrent[key];
+    if (deepEqual(desiredVal, currentVal)) continue;
+    changed[key] = desiredVal === undefined ? null : desiredVal;
   }
   return changed;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
 
-import { diffResources } from '../../src/diff/compare.js';
+import { changedFields, diffResources } from '../../src/diff/compare.js';
 
 describe('diffResources', () => {
   test('detects resource only in cloud (create)', () => {
@@ -93,6 +93,67 @@ describe('diffResources', () => {
     const result = diffResources(cloud, local);
     expect(result).toHaveLength(1);
     expect(result[0].data.uniqueName).toBe('template_a');
+  });
+
+  test('detects field present only in local (campo removido) as null in update', () => {
+    const cloud = [{ sid: 'WQ1', friendlyName: 'Q', targetWorkers: '1==1' }];
+    const local = [
+      { sid: 'WQ1', friendlyName: 'Q', targetWorkers: '1==1', maxReservedWorkers: 5 },
+    ];
+    const result = diffResources(cloud, local);
+    expect(result).toHaveLength(1);
+    expect(result[0].action).toBe('update');
+    expect(result[0].data).toEqual({ maxReservedWorkers: null });
+  });
+
+  test('detects field present only in cloud as added in update', () => {
+    const cloud = [
+      { sid: 'WQ1', friendlyName: 'Q', targetWorkers: '1==1', maxReservedWorkers: 5 },
+    ];
+    const local = [{ sid: 'WQ1', friendlyName: 'Q', targetWorkers: '1==1' }];
+    const result = diffResources(cloud, local);
+    expect(result).toHaveLength(1);
+    expect(result[0].action).toBe('update');
+    expect(result[0].data).toEqual({ maxReservedWorkers: 5 });
+  });
+
+  test('normalizes definition string vs object as equal', () => {
+    const defObj = { description: 'flow', states: { Trigger: { type: 'trigger' } } };
+    const cloud = [{ sid: 'FW1', friendlyName: 'Flow', definition: defObj }];
+    const local = [{ sid: 'FW1', friendlyName: 'Flow', definition: JSON.stringify(defObj) }];
+    expect(diffResources(cloud, local)).toHaveLength(0);
+  });
+
+  test('normalizes configuration string vs object as equal', () => {
+    const cfg = { task_routing: { filters: [] } };
+    const cloud = [{ sid: 'WW1', friendlyName: 'W', configuration: cfg }];
+    const local = [{ sid: 'WW1', friendlyName: 'W', configuration: JSON.stringify(cfg) }];
+    expect(diffResources(cloud, local)).toHaveLength(0);
+  });
+
+  test('ignores revision field (read-only metadata)', () => {
+    const cloud = [{ sid: 'WW1', friendlyName: 'W', revision: 5 }];
+    const local = [{ sid: 'WW1', friendlyName: 'W', revision: 4 }];
+    expect(diffResources(cloud, local)).toHaveLength(0);
+  });
+});
+
+describe('changedFields', () => {
+  test('returns only fields that differ between desired and current', () => {
+    const result = changedFields(
+      { friendlyName: 'A', targetWorkers: 'X', maxReservedWorkers: 5 },
+      { friendlyName: 'A', targetWorkers: 'Y', maxReservedWorkers: 5 },
+    );
+    expect(result).toEqual({ targetWorkers: 'X' });
+  });
+
+  test('represents removal with null when key only in current', () => {
+    const result = changedFields({ a: 1 }, { a: 1, b: 2 });
+    expect(result).toEqual({ b: null });
+  });
+
+  test('returns empty object when items are equal', () => {
+    expect(changedFields({ a: 1 }, { a: 1 })).toEqual({});
   });
 });
 
