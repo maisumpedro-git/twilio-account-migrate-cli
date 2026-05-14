@@ -74,6 +74,23 @@ jest.unstable_mockModule('../../src/migration/studio-validator.js', () => ({
   validateStudioFlowsOperations: mockValidateStudioFlowsOperations,
 }));
 
+const mockDetectDrift = jest.fn().mockResolvedValue({ hasDrift: false, drifts: [] });
+jest.unstable_mockModule('../../src/migration/drift-check.js', () => ({
+  detectDrift: mockDetectDrift,
+}));
+
+const mockCreateBackup = jest.fn().mockResolvedValue('/env/dev/state/.backup/20260101000000');
+const mockPruneBackups = jest.fn().mockResolvedValue([]);
+jest.unstable_mockModule('../../src/state/backup.js', () => ({
+  createBackup: mockCreateBackup,
+  pruneBackups: mockPruneBackups,
+}));
+
+const mockPreviewMigration = jest.fn().mockResolvedValue(undefined);
+jest.unstable_mockModule('../../src/migration/preview.js', () => ({
+  previewMigration: mockPreviewMigration,
+}));
+
 const mockValidateMigration = jest.fn();
 
 jest.unstable_mockModule('../../src/migration/validator.js', () => ({
@@ -123,6 +140,9 @@ describe('pushCommand — state updates', () => {
       checked: 0,
       failures: [],
     });
+    mockDetectDrift.mockResolvedValue({ hasDrift: false, drifts: [] });
+    mockCreateBackup.mockResolvedValue('/env/dev/state/.backup/20260101000000');
+    mockPruneBackups.mockResolvedValue([]);
   });
 
   test('create operation adds resource to state', async () => {

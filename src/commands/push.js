@@ -1,5 +1,6 @@
 import { loadEnvFile } from '../config.js';
 import { executeMigration } from '../migration/executor.js';
+import { detectDrift } from '../migration/drift-check.js';
 import { lintMigration, summarizeIssues } from '../migration/linter.js';
 import { previewMigration } from '../migration/preview.js';
 import { validateStudioFlowsOperations } from '../migration/studio-validator.js';
@@ -19,6 +20,35 @@ import { createClient } from '../twilio/clients.js';
 import { fetchResource } from '../twilio/fetchers.js';
 import { error, info, success, warn } from '../utils/display.js';
 import { printTwilioError } from '../utils/twilio-error.js';
+
+async function checkDriftBeforePush(account, state, operations, acceptDrift) {
+  const { hasDrift, drifts } = await detectDrift(account, state, operations);
+  if (!hasDrift) return true;
+
+  if (acceptDrift) {
+    warn(`Drift detectado entre state local e cloud (--accept-drift ativo, prosseguindo):`);
+  } else {
+    error(`Drift detectado entre state local e cloud:`);
+  }
+
+  for (const d of drifts) {
+    if (d.error) {
+      warn(`  ${d.type}: erro ao buscar cloud (${d.error})`);
+      continue;
+    }
+    console.log(`  ${d.type}: ${d.ops.length} divergencia(s)`);
+    for (const op of d.ops) {
+      const label = op.match?.friendlyName || op.data?.friendlyName || '?';
+      console.log(`    ${op.action} "${label}"`);
+    }
+  }
+
+  if (acceptDrift) return true;
+
+  info('Rode `tam pull` para sincronizar o state local antes do push, ou use --accept-drift.');
+  process.exitCode = 1;
+  return false;
+}
 
 function lintBeforePush(migrationName, migration, state) {
   const issues = lintMigration(migration, state);
@@ -91,7 +121,7 @@ async function updateStateFromResult(state, dir, r) {
 }
 
 export async function pushCommand(options) {
-  const { dir, envFile, dryRun, verbose } = options;
+  const { dir, envFile, dryRun, verbose, acceptDrift } = options;
   const account = loadEnvFile(envFile);
   const api = createClient(account);
 
@@ -114,6 +144,7 @@ export async function pushCommand(options) {
     if (!lintBeforePush(partial.name, migration, state)) return;
 
     const pendingOps = migration.operations.slice(partial.lastOperationIndex);
+    if (!(await checkDriftBeforePush(account, state, pendingOps, acceptDrift))) return;
     if (!(await preValidateStudioFlows(api, partial.name, pendingOps))) return;
 
     try {
@@ -172,6 +203,8 @@ export async function pushCommand(options) {
     validateMigration(migration);
 
     if (!dryRun && !lintBeforePush(name, migration, state)) return;
+    if (!dryRun && !(await checkDriftBeforePush(account, state, migration.operations, acceptDrift)))
+      return;
     if (!dryRun && !(await preValidateStudioFlows(api, name, migration.operations))) return;
 
     try {
