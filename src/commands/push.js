@@ -121,9 +121,23 @@ async function updateStateFromResult(state, dir, r) {
 }
 
 export async function pushCommand(options) {
-  const { dir, envFile, dryRun, verbose, acceptDrift } = options;
+  const { dir, envFile, dryRun, verbose, acceptDrift, verify = true } = options;
   const account = loadEnvFile(envFile);
   const api = createClient(account);
+
+  const onVerify = (index, op, result) => {
+    if (result.ok) return;
+    const label = `${op.action} ${op.type}: ${op.data?.friendlyName || op.match?.friendlyName || '?'}`;
+    if (result.fetchError) {
+      warn(`  verify[${index}] ${label}: nao foi possivel buscar (${result.fetchError})`);
+      return;
+    }
+    if (result.skipped) return;
+    warn(`  verify[${index}] ${label}: ${result.mismatches.length} divergencia(s) pos-aplicacao:`);
+    for (const m of result.mismatches) {
+      warn(`    ${m.field}: esperado=${JSON.stringify(m.expected)} cloud=${JSON.stringify(m.actual)}`);
+    }
+  };
 
   const workspace = await fetchResource(account, 'workspace');
   const workspaceSid = workspace?.sid;
@@ -150,6 +164,8 @@ export async function pushCommand(options) {
     try {
       const results = await executeMigration(api, migration, state, workspaceSid, {
         startIndex: partial.lastOperationIndex,
+        verify,
+        onVerify,
         onProgress: async (index, total) => {
           await markPartiallyApplied(dir, partial.name, index + 1, total, null);
         },
@@ -210,6 +226,8 @@ export async function pushCommand(options) {
     try {
       const results = await executeMigration(api, migration, state, workspaceSid, {
         dryRun,
+        verify: !dryRun && verify,
+        onVerify,
         onProgress: dryRun
           ? undefined
           : async (index, total) => {

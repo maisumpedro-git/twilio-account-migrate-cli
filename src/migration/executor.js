@@ -1,6 +1,7 @@
 import { executeOperation } from '../twilio/writers.js';
 
 import { resolveRefs } from './resolver.js';
+import { verifyOperation } from './verify.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -9,7 +10,7 @@ export async function executeMigration(
   migration,
   state,
   workspaceSid,
-  { dryRun = false, startIndex = 0, onProgress } = {},
+  { dryRun = false, startIndex = 0, onProgress, verify = false, onVerify } = {},
 ) {
   const runtimeSids = {};
   const results = [];
@@ -37,6 +38,11 @@ export async function executeMigration(
     if (operation.action === 'create' && result.sid) {
       const name = operation.data.friendlyName || operation.data.uniqueName;
       runtimeSids[`${operation.type}:${name}`] = result.sid;
+    }
+
+    if (verify) {
+      const verifyResult = await verifyOperation(api, resolved, result, workspaceSid);
+      if (onVerify) await onVerify(i, resolved, verifyResult);
     }
 
     if (onProgress) await onProgress(i, migration.operations.length);

@@ -41,6 +41,7 @@ program
   .option('--dry-run', 'Mostrar o que seria feito sem executar')
   .option('--verbose', 'Em conjunto com --dry-run: faz refetch e mostra diff por campo')
   .option('--accept-drift', 'Prosseguir mesmo se cloud divergir do state local')
+  .option('--no-verify', 'Desabilita refetch e comparacao pos-operacao')
   .action(async (opts) => {
     await pushCommand(opts);
   });
